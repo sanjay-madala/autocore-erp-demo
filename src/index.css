@@ -47,7 +47,7 @@
   --text-primary: #09090b; /* zinc-950 — 21:1 on white */
   --text-secondary: #27272a; /* zinc-800 — 15.7:1 on white, 6.8:1 on zinc-100 */
   --text-muted: #52525b; /* zinc-600 — 7.73:1 on white, 7.03:1 on #f4f4f5 (was #71717a 4.40 FAIL) */
-  --text-faint: #71717a; /* zinc-500 — 4.83:1 on white (was #a1a1aa 2.56 FAIL) — minimal faint that still passes AA */
+  --text-faint: #64646e; /* zinc-500+ — 5.85:1 on white, 5.32:1 on #f4f4f5 (was #71717a 4.40 FAIL on muted) — lightest faint that passes AA on both */
   --text-inverse: #fafafa;
 
   /* Accent — single Cobalt, no gradients */

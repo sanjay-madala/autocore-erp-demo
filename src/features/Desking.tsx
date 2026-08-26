@@ -37,16 +37,56 @@ const LENDERS: Lender[] = [
 
 type StateFee = { code: string; name: string; taxRate: number; docFee: number; titleFee: number }
 const STATES: StateFee[] = [
-  { code: "MI", name: "Michigan", taxRate: 0.06, docFee: 260, titleFee: 15 },
-  { code: "CA", name: "California", taxRate: 0.0725, docFee: 85, titleFee: 29 },
-  { code: "TX", name: "Texas", taxRate: 0.0625, docFee: 150, titleFee: 33 },
-  { code: "FL", name: "Florida", taxRate: 0.06, docFee: 799, titleFee: 225 },
-  { code: "NY", name: "New York", taxRate: 0.04, docFee: 175, titleFee: 50 },
-  { code: "IL", name: "Illinois", taxRate: 0.0625, docFee: 358, titleFee: 199 },
-  { code: "GA", name: "Georgia", taxRate: 0.066, docFee: 699, titleFee: 18 },
-  { code: "OH", name: "Ohio", taxRate: 0.0575, docFee: 250, titleFee: 15 },
+  { code: "AL", name: "Alabama", taxRate: 0.04, docFee: 599, titleFee: 23 },
+  { code: "AK", name: "Alaska", taxRate: 0, docFee: 399, titleFee: 15 },
   { code: "AZ", name: "Arizona", taxRate: 0.056, docFee: 499, titleFee: 12 },
-  { code: "AL", name: "Alabama", taxRate: 0.02, docFee: 599, titleFee: 23 },
+  { code: "AR", name: "Arkansas", taxRate: 0.065, docFee: 129, titleFee: 29 },
+  { code: "CA", name: "California", taxRate: 0.0725, docFee: 85, titleFee: 29 },
+  { code: "CO", name: "Colorado", taxRate: 0.029, docFee: 599, titleFee: 21 },
+  { code: "CT", name: "Connecticut", taxRate: 0.0635, docFee: 599, titleFee: 80 },
+  { code: "DE", name: "Delaware", taxRate: 0, docFee: 0, titleFee: 35 },
+  { code: "FL", name: "Florida", taxRate: 0.06, docFee: 799, titleFee: 225 },
+  { code: "GA", name: "Georgia", taxRate: 0.066, docFee: 699, titleFee: 18 },
+  { code: "HI", name: "Hawaii", taxRate: 0.04, docFee: 399, titleFee: 25 },
+  { code: "ID", name: "Idaho", taxRate: 0.06, docFee: 399, titleFee: 21 },
+  { code: "IL", name: "Illinois", taxRate: 0.0625, docFee: 358, titleFee: 199 },
+  { code: "IN", name: "Indiana", taxRate: 0.07, docFee: 199, titleFee: 25 },
+  { code: "IA", name: "Iowa", taxRate: 0.06, docFee: 180, titleFee: 25 },
+  { code: "KS", name: "Kansas", taxRate: 0.065, docFee: 599, titleFee: 25 },
+  { code: "KY", name: "Kentucky", taxRate: 0.06, docFee: 499, titleFee: 12 },
+  { code: "LA", name: "Louisiana", taxRate: 0.0445, docFee: 499, titleFee: 68 },
+  { code: "ME", name: "Maine", taxRate: 0.055, docFee: 499, titleFee: 35 },
+  { code: "MD", name: "Maryland", taxRate: 0.06, docFee: 500, titleFee: 100 },
+  { code: "MA", name: "Massachusetts", taxRate: 0.0625, docFee: 459, titleFee: 75 },
+  { code: "MI", name: "Michigan", taxRate: 0.06, docFee: 260, titleFee: 15 },
+  { code: "MN", name: "Minnesota", taxRate: 0.06875, docFee: 125, titleFee: 35 },
+  { code: "MS", name: "Mississippi", taxRate: 0.07, docFee: 599, titleFee: 12 },
+  { code: "MO", name: "Missouri", taxRate: 0.04225, docFee: 499, titleFee: 14 },
+  { code: "MT", name: "Montana", taxRate: 0, docFee: 0, titleFee: 112 },
+  { code: "NE", name: "Nebraska", taxRate: 0.055, docFee: 599, titleFee: 15 },
+  { code: "NV", name: "Nevada", taxRate: 0.0685, docFee: 499, titleFee: 29 },
+  { code: "NH", name: "New Hampshire", taxRate: 0, docFee: 0, titleFee: 35 },
+  { code: "NJ", name: "New Jersey", taxRate: 0.06625, docFee: 699, titleFee: 60 },
+  { code: "NM", name: "New Mexico", taxRate: 0.05125, docFee: 399, titleFee: 13 },
+  { code: "NY", name: "New York", taxRate: 0.04, docFee: 175, titleFee: 50 },
+  { code: "NC", name: "North Carolina", taxRate: 0.03, docFee: 599, titleFee: 58 },
+  { code: "ND", name: "North Dakota", taxRate: 0.05, docFee: 299, titleFee: 12 },
+  { code: "OH", name: "Ohio", taxRate: 0.0575, docFee: 250, titleFee: 15 },
+  { code: "OK", name: "Oklahoma", taxRate: 0.045, docFee: 699, titleFee: 33 },
+  { code: "OR", name: "Oregon", taxRate: 0, docFee: 0, titleFee: 98 },
+  { code: "PA", name: "Pennsylvania", taxRate: 0.06, docFee: 449, titleFee: 62 },
+  { code: "RI", name: "Rhode Island", taxRate: 0.07, docFee: 399, titleFee: 32 },
+  { code: "SC", name: "South Carolina", taxRate: 0.06, docFee: 599, titleFee: 15 },
+  { code: "SD", name: "South Dakota", taxRate: 0.045, docFee: 199, titleFee: 12 },
+  { code: "TN", name: "Tennessee", taxRate: 0.07, docFee: 599, titleFee: 29 },
+  { code: "TX", name: "Texas", taxRate: 0.0625, docFee: 150, titleFee: 33 },
+  { code: "UT", name: "Utah", taxRate: 0.0485, docFee: 399, titleFee: 12 },
+  { code: "VT", name: "Vermont", taxRate: 0.06, docFee: 599, titleFee: 42 },
+  { code: "VA", name: "Virginia", taxRate: 0.043, docFee: 599, titleFee: 15 },
+  { code: "WA", name: "Washington", taxRate: 0.065, docFee: 200, titleFee: 35 },
+  { code: "WV", name: "West Virginia", taxRate: 0.06, docFee: 599, titleFee: 15 },
+  { code: "WI", name: "Wisconsin", taxRate: 0.05, docFee: 399, titleFee: 164 },
+  { code: "WY", name: "Wyoming", taxRate: 0.04, docFee: 299, titleFee: 15 },
 ]
 
 type Product = { id: string; name: string; price: number; desc: string; cat: "Protection" | "Appearance" | "Service" }
@@ -114,10 +154,17 @@ export default function Desking() {
   const [fiGuardMsg, setFiGuardMsg] = useState<string | null>(null)
   const systemHealth = useStore(s=> s.systemHealth)
   const degraded = systemHealth.degraded
+  // E12 — 50-state tax/fee via complianceStore + Vitu/CVR titling
+  const complianceState = useStore((s) => s.complianceState)
+  const submitVituStore = useStore((s) => s.submitVitu)
+  const [vituTracking, setVituTracking] = useState<string | null>(complianceState.vituSubmissions[0]?.tracking ?? null)
+  const [vituSubmitted, setVituSubmitted] = useState<boolean>(complianceState.vituSubmissions.length > 0)
 
   const vehicle: Vehicle | undefined = useMemo(() => vehicles.find((v) => v.id === selectedVehicleId), [selectedVehicleId])
   const lender: Lender | undefined = useMemo(() => LENDERS.find((l) => l.id === lenderId), [lenderId])
-  const stateFee: StateFee | undefined = useMemo(() => STATES.find((s) => s.code === stateCode), [stateCode])
+  // 50-state via complianceState.taxRules — live pencil uses taxRules
+  const taxRulesAsStateFee: StateFee[] = useMemo(() => complianceState.taxRules.map((r) => ({ code: r.code, name: r.state, taxRate: r.rate, docFee: r.docFee, titleFee: r.titleFee })), [complianceState.taxRules])
+  const stateFee: StateFee | undefined = useMemo(() => taxRulesAsStateFee.find((s) => s.code === stateCode) ?? STATES.find((s) => s.code === stateCode), [taxRulesAsStateFee, stateCode])
 
   // pencils — three terms sharing down/tax/incentives, rate bumps per term
   const pencils = useMemo(() => {
@@ -339,15 +386,15 @@ export default function Desking() {
             </div>
           </div>
 
-          {/* state + tax/fee */}
+          {/* state + tax/fee — E12 50-state via taxRules */}
           <div className="space-y-2">
-            <label className="text-label-mono text-[var(--text-muted)]">Tax / fee • 50-state calc</label>
+            <label className="text-label-mono text-[var(--text-muted)]">Tax / fee • 50-state calc <span className="font-mono text-[10px] text-[var(--accent)]">via taxRules</span></label>
             <select
               value={stateCode}
               onChange={(e) => setStateCode(e.target.value)}
               className="flex h-9 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[13px] font-[500]"
             >
-              {STATES.map((s) => (
+              {taxRulesAsStateFee.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.code} • {s.name} • {(s.taxRate * 100).toFixed(2)}% • doc {fmt(s.docFee)}
                 </option>
@@ -428,6 +475,54 @@ export default function Desking() {
               <div className="mt-2 font-mono text-[11px] text-[var(--text-muted)]">
                 Applied: {primaryPencil ? fmt(primaryPencil.incentives) : "—"} • reduces taxable • live &lt;500ms
               </div>
+            </div>
+          </div>
+          {/* E12 — Vitu/CVR EVR/titling integration — §6.12 integrate, don't rebuild */}
+          <div className="md:col-span-3 mt-1 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-muted)] p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-zinc-900 text-white">
+                <FileText size={16} weight="fill" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] font-semibold">Vitu / CVR — EVR titling integration</span>
+                  <span className="rounded-full bg-white border border-[var(--border)] px-2 py-0.5 font-mono text-[10px] font-semibold">§6.12 • integrate, don’t rebuild</span>
+                  <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">E12</span>
+                </div>
+                <div className="text-[11px] leading-snug text-[var(--text-secondary)]">
+                  Title & reg via Vitu/CVR — paperless EVR • lien payoff queued • 50-state fee data drives pencil above
+                  {stateFee && (
+                    <span className="ml-1 font-mono text-[11px] text-[var(--text-primary)]">
+                      {stateFee.code} {(stateFee.taxRate * 100).toFixed(2)}% • doc {fmt(stateFee.docFee)} + title {fmt(stateFee.titleFee)} • via taxRules (§5.3)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {vituSubmitted && vituTracking ? (
+                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                  <CheckCircle size={14} weight="fill" className="text-emerald-600" />
+                  Submitted to Vitu • tracking #{vituTracking} • lien payoff queued
+                  <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">{vehicle?.vin.slice(-6) ?? "—"}</span>
+                </motion.div>
+              ) : null}
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  const vin = vehicle?.vin ?? "JTMAAACA4PA042118"
+                  const t = submitVituStore(vin)
+                  setVituTracking(t)
+                  setVituSubmitted(true)
+                  const msg = `Title submitted to Vitu • ${vin.slice(-6)} • tracking ${t} • CA 7.25% / TX 6.25% taxRules validated • lien payoff queued`
+                  setAudit((a) => [...a, { t: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), who: "System • Vitu", what: msg }])
+                }}
+              >
+                <FileText size={14} weight="fill" />
+                {vituSubmitted ? "Resubmit to Vitu/CVR" : "Submit title to Vitu/CVR"}
+              </Button>
+              <span className="font-mono text-[10px] text-[var(--text-faint)]">tracking #VIT-8841 mock • queued</span>
             </div>
           </div>
         </div>

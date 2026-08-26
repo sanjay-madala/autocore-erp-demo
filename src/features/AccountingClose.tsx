@@ -356,7 +356,7 @@ export default function AccountingClose(){
                     <thead className="bg-zinc-950 text-[10px] font-[650] tracking-widest text-zinc-300"><tr><th className="px-3 py-2">ROOFTOP</th><th className="px-3 py-2 text-right">UNITS</th><th className="px-3 py-2 text-right">FRONT</th><th className="px-3 py-2 text-right">BACK</th><th className="px-3 py-2 text-right">SVC</th><th className="px-3 py-2 text-right">PARTS</th><th className="px-3 py-2 text-right">CIT</th><th className="px-3 py-2 text-right">FLOOR</th></tr></thead>
                     <tbody className="divide-y divide-[var(--border)]">
                       {consolidation.rows.map(r=>(
-                        <tr key={r.rooftopId} className="hover:bg-zinc-50">
+                        <tr key={r.rooftopId} onClick={()=> setDrillOpen(true)} className="cursor-pointer hover:bg-zinc-50" title="Click to drill per-rooftop breakdown">
                           <td className="px-3 py-2 font-[600]">{r.rooftopName} <span className="font-mono text-[10px] text-[var(--text-muted)]">• {r.brand}</span></td>
                           <td className="px-3 py-2 text-right font-mono">{r.units}</td>
                           <td className="px-3 py-2 text-right font-mono">{fmt(r.frontGross)}</td>
@@ -395,29 +395,62 @@ export default function AccountingClose(){
       <AnimatePresence>
         {drillOpen && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={()=> setDrillOpen(false)}>
-            <motion.div initial={{scale:0.98, y:8}} animate={{scale:1, y:0}} exit={{scale:0.98, y:8}} onClick={e=> e.stopPropagation()} className="max-h-[80vh] w-full max-w-[720px] overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl">
+            <motion.div initial={{scale:0.98, y:8}} animate={{scale:1, y:0}} exit={{scale:0.98, y:8}} onClick={e=> e.stopPropagation()} className="max-h-[85vh] w-full max-w-[840px] overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b bg-zinc-900 px-4 py-3 text-white">
-                <span className="text-[13px] font-[700]">Eliminations drill-down — intercompany transfers</span>
-                <button onClick={()=> setDrillOpen(false)} className="grid h-7 w-7 place-items-center rounded-full bg-white/10"><X size={14} /></button>
+                <span className="text-[13px] font-[700]">Consolidated drill-down — per-rooftop breakdown + eliminations</span>
+                <button aria-label="Close drill-down" onClick={()=> setDrillOpen(false)} className="grid h-7 w-7 place-items-center rounded-full bg-white/10"><X size={14} /></button>
               </div>
-              <div className="overflow-auto p-4">
-                <div className="mb-3 flex items-center gap-2 font-mono text-[11px]"><span className="rounded-full bg-amber-100 px-2 py-1 text-amber-900">Eliminations -{fmt(consolidation.eliminations)}</span><span className="rounded-full bg-zinc-100 px-2 py-1">{transferList.length} transfers • auto-posted at transaction time</span><span className="ml-auto text-[var(--text-muted)]">Vehicle/parts transfers from Inventory → GL</span></div>
-                <table className="w-full text-left text-[12px]">
-                  <thead className="bg-[var(--surface-muted)] font-mono text-[10px] tracking-widest text-[var(--text-muted)]"><tr><th className="px-3 py-2">VIN • STOCK</th><th className="px-3 py-2">FROM → TO</th><th className="px-3 py-2">AT</th><th className="px-3 py-2 text-right">ELIM</th></tr></thead>
-                  <tbody className="divide-y">
-                    {transferList.length===0 ? (
-                      <tr><td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">No transfers yet — create via Inventory transferVehicle() • eliminations show $12,400 static demo until first live transfer</td></tr>
-                    ) : transferList.map((t,i)=>(
-                      <tr key={i} className="hover:bg-[var(--surface-hover)]">
-                        <td className="px-3 py-2 font-mono text-[11px]">{t.vin.slice(-6)} • {t.stockNo}</td>
-                        <td className="px-3 py-2"><span className="rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-white">{t.from.toUpperCase()}</span> <ArrowRight size={10} className="mx-1 inline" /> <span className="rounded bg-emerald-600 px-1.5 py-0.5 font-mono text-[10px] text-white">{t.to.toUpperCase()}</span></td>
-                        <td className="px-3 py-2 font-mono text-[11px]">{t.at}</td>
-                        <td className="px-3 py-2 text-right font-mono">{fmt(3100)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="mt-3 rounded-xl border bg-amber-50 p-3 text-[11px] leading-relaxed"><span className="font-[650]">Auto-posted at transaction time:</span> vehicle/parts transfers from Inventory post intercompany JE immediately (no batch). Consolidated rollup subtracts internal profit • controller views real-time, not month-end only.</div>
+              <div className="overflow-auto p-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]"><span className="rounded-full bg-amber-100 px-2 py-1 text-amber-900">Eliminations -{fmt(consolidation.eliminations)}</span><span className="rounded-full bg-zinc-100 px-2 py-1">{transferList.length} transfers • auto-posted at transaction time</span><span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">Group GP {fmt(consolidation.group.frontGross + consolidation.group.backGross)}</span><span className="ml-auto text-[var(--text-muted)]">3 rooftops • click row → transfer detail • matches CommandCenter</span></div>
+
+                {/* Per-rooftop breakdown — required spec: Downtown Toyota, North Ford, Westside Honda */}
+                <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+                  <div className="bg-zinc-900 px-3 py-2 text-[11px] font-[650] tracking-wide text-white">Per-rooftop breakdown — 3 rooftops • eliminations applied</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-zinc-950 text-[10px] font-[650] tracking-widest text-zinc-300"><tr><th className="px-3 py-2">ROOFTOP</th><th className="px-3 py-2 text-right">UNITS</th><th className="px-3 py-2 text-right">FRONT</th><th className="px-3 py-2 text-right">BACK</th><th className="px-3 py-2 text-right">SVC</th><th className="px-3 py-2 text-right">PARTS</th><th className="px-3 py-2 text-right">CIT</th><th className="px-3 py-2 text-right">FLOOR</th></tr></thead>
+                      <tbody className="divide-y divide-[var(--border)]">
+                        {consolidation.rows.map(r=>{
+                          const short = r.rooftopId==="dtown" ? "Downtown Toyota" : r.rooftopId==="north" ? "North Ford" : "Westside Honda"
+                          return (
+                            <tr key={r.rooftopId} className="hover:bg-zinc-50">
+                              <td className="px-3 py-2 font-[600]">{short} <span className="font-mono text-[10px] text-[var(--text-muted)]">• {r.brand}</span></td>
+                              <td className="px-3 py-2 text-right font-mono">{r.units}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.frontGross)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.backGross)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.svcGross)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.partsGross)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.citOpen)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmt(r.floorplan)}</td>
+                            </tr>
+                          )
+                        })}
+                        <tr className="bg-zinc-900 font-mono text-white"><td className="px-3 py-2 font-[700]">GROUP CONSOLIDATED</td><td className="px-3 py-2 text-right font-[700]">{consolidation.group.units}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.frontGross)}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.backGross)}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.svcGross)}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.partsGross)}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.citOpen)}</td><td className="px-3 py-2 text-right font-[700]">{fmt(consolidation.group.floorplan)}</td></tr>
+                        <tr className="bg-amber-50 text-[11px]"><td colSpan={8} className="px-3 py-2 font-mono">↳ Intercompany eliminations auto-posted: <span className="font-[700]">-{fmt(consolidation.eliminations)}</span> ({transferList.length} transfers • Vehicle/parts transfers Inventory → GL) • group totals match CommandCenter</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+                  <div className="bg-[var(--surface-muted)] px-3 py-2 text-[11px] font-[600]">Intercompany transfers — eliminations detail</div>
+                  <table className="w-full text-left text-[12px]">
+                    <thead className="bg-[var(--surface-muted)] font-mono text-[10px] tracking-widest text-[var(--text-muted)]"><tr><th className="px-3 py-2">VIN • STOCK</th><th className="px-3 py-2">FROM → TO</th><th className="px-3 py-2">AT</th><th className="px-3 py-2 text-right">ELIM</th></tr></thead>
+                    <tbody className="divide-y">
+                      {transferList.length===0 ? (
+                        <tr><td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[var(--text-muted)]">No transfers yet — create via Inventory transferVehicle() • eliminations show $12,400 static demo until first live transfer</td></tr>
+                      ) : transferList.map((t,i)=>(
+                        <tr key={i} className="hover:bg-[var(--surface-hover)]">
+                          <td className="px-3 py-2 font-mono text-[11px]">{t.vin.slice(-6)} • {t.stockNo}</td>
+                          <td className="px-3 py-2"><span className="rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-white">{t.from.toUpperCase()}</span> <ArrowRight size={10} className="mx-1 inline" /> <span className="rounded bg-emerald-600 px-1.5 py-0.5 font-mono text-[10px] text-white">{t.to.toUpperCase()}</span></td>
+                          <td className="px-3 py-2 font-mono text-[11px]">{t.at}</td>
+                          <td className="px-3 py-2 text-right font-mono">{fmt(3100)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-xl border bg-amber-50 p-3 text-[11px] leading-relaxed"><span className="font-[650]">Auto-posted at transaction time:</span> vehicle/parts transfers from Inventory post intercompany JE immediately (no batch). Consolidated rollup subtracts internal profit • controller views real-time, not month-end only. CommandCenter group totals = AccountingClose consolidated (same store.getGroupConsolidation()).</div>
               </div>
               <div className="flex justify-end gap-2 border-t bg-[var(--surface-muted)] p-3"><Button size="sm" variant="outline" className="bg-white" onClick={()=> setDrillOpen(false)}>Close</Button></div>
             </motion.div>

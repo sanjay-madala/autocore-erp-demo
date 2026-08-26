@@ -16,7 +16,7 @@ const buttonVariants = cva(
         ghost:
           "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
         subtle:
-          "bg-[var(--accent-muted)] text-[var(--accent)] hover:bg-[#dde6ff] border border-[var(--accent-border)]",
+          "bg-[var(--accent-muted)] text-[var(--accent-hover)] hover:bg-[#dde6ff] border border-[var(--accent-border)]",
       },
       size: {
         default: "h-8 px-3.5 text-[13px] rounded-xl",

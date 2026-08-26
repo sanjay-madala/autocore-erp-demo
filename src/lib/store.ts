@@ -87,6 +87,34 @@ export type SystemHealth = {
   incidentReportPublished: boolean
 }
 
+// ── E12 Compliance & Security ──
+export type ComplianceAuditEntry = {
+  at: string
+  actor: string
+  action: string
+  resource: string
+  result: "allow" | "deny" | "success"
+  ip: string
+}
+export type SafeguardItem = { control: string; status: "pass" | "review" | "fail"; evidence: string; lastVerified: string }
+export type TaxRule = { state: string; code: string; rate: number; docFee: number; titleFee: number; note?: string }
+export type VituSubmission = { vin: string; status: "queued" | "submitted" | "accepted" | "rejected"; tracking: string; lienPayoff: string; at: string; rooftop: string }
+export type ComplianceState = {
+  mfaCoverage: number
+  encryption: string
+  accessLogs: ComplianceAuditEntry[]
+  safeguardsChecklist: SafeguardItem[]
+  taxRules: TaxRule[]
+  vituSubmissions: VituSubmission[]
+  // extended E12 evidence
+  soc: { soc1: string; soc2: string; soc1Status: string; soc2Status: string }
+  iso: { iso27001: string; iso27701: string; pathMonth: number }
+  privacyLaws: { count: number; states: string[]; note: string }
+  penTest: { last: string; vulnCount: number; siem: string; leastPrivilege: string }
+  backup: { immutable: boolean; rpo: string; rto: string; lastRestoreTest: string; tested: boolean }
+  drStrategy: string
+}
+
 // ── F10 Migration Workbench ──
 export type MigrationExtractorStatus = "done" | "progress" | "queued"
 export type MigrationExtractor = {
@@ -211,6 +239,9 @@ export type AppState = {
   lastPostedAt: string | null
   migration: MigrationState
   migrationState: MigrationState
+  complianceState: ComplianceState
+  submitVitu: (vin: string) => string
+  exportSafeguards: () => string
   // F1
   createDealFromLead: (customerName: string, vin: string) => string
   updatePencil: (dealId: string, pencil: F1Deal["pencil"]) => void
@@ -343,6 +374,96 @@ const seedIncentiveClaims: IncentiveClaim[] = [
     stackingConflict: false, oemResponse: "Paid $1,000 via Ford Credit — reconciled"
   },
 ]
+
+// ── E12 Compliance seed — FTC Safeguards, SOC, ISO, 50-state tax, Vitu, privacy, security, DR ──
+const seedTaxRules: TaxRule[] = [
+  { state: "Alabama", code: "AL", rate: 0.04, docFee: 599, titleFee: 23, note: "2% auto sales singly" },
+  { state: "Alaska", code: "AK", rate: 0, docFee: 399, titleFee: 15, note: "No state sales tax" },
+  { state: "Arizona", code: "AZ", rate: 0.056, docFee: 499, titleFee: 12 },
+  { state: "Arkansas", code: "AR", rate: 0.065, docFee: 129, titleFee: 29 },
+  { state: "California", code: "CA", rate: 0.0725, docFee: 85, titleFee: 29, note: "§5.3 CA Privacy + 2-party recording" },
+  { state: "Colorado", code: "CO", rate: 0.029, docFee: 599, titleFee: 21 },
+  { state: "Connecticut", code: "CT", rate: 0.0635, docFee: 599, titleFee: 80 },
+  { state: "Delaware", code: "DE", rate: 0, docFee: 0, titleFee: 35, note: "No sales tax" },
+  { state: "Florida", code: "FL", rate: 0.06, docFee: 799, titleFee: 225 },
+  { state: "Georgia", code: "GA", rate: 0.066, docFee: 699, titleFee: 18, note: "TAVT ad valorem" },
+  { state: "Hawaii", code: "HI", rate: 0.04, docFee: 399, titleFee: 25 },
+  { state: "Idaho", code: "ID", rate: 0.06, docFee: 399, titleFee: 21 },
+  { state: "Illinois", code: "IL", rate: 0.0625, docFee: 358, titleFee: 199 },
+  { state: "Indiana", code: "IN", rate: 0.07, docFee: 199, titleFee: 25 },
+  { state: "Iowa", code: "IA", rate: 0.06, docFee: 180, titleFee: 25 },
+  { state: "Kansas", code: "KS", rate: 0.065, docFee: 599, titleFee: 25 },
+  { state: "Kentucky", code: "KY", rate: 0.06, docFee: 499, titleFee: 12 },
+  { state: "Louisiana", code: "LA", rate: 0.0445, docFee: 499, titleFee: 68.5 },
+  { state: "Maine", code: "ME", rate: 0.055, docFee: 499, titleFee: 35 },
+  { state: "Maryland", code: "MD", rate: 0.06, docFee: 500, titleFee: 100 },
+  { state: "Massachusetts", code: "MA", rate: 0.0625, docFee: 459, titleFee: 75 },
+  { state: "Michigan", code: "MI", rate: 0.06, docFee: 260, titleFee: 15 },
+  { state: "Minnesota", code: "MN", rate: 0.06875, docFee: 125, titleFee: 35 },
+  { state: "Mississippi", code: "MS", rate: 0.07, docFee: 599, titleFee: 12 },
+  { state: "Missouri", code: "MO", rate: 0.04225, docFee: 499, titleFee: 14 },
+  { state: "Montana", code: "MT", rate: 0, docFee: 0, titleFee: 112 },
+  { state: "Nebraska", code: "NE", rate: 0.055, docFee: 599, titleFee: 15 },
+  { state: "Nevada", code: "NV", rate: 0.0685, docFee: 499, titleFee: 29 },
+  { state: "New Hampshire", code: "NH", rate: 0, docFee: 0, titleFee: 35 },
+  { state: "New Jersey", code: "NJ", rate: 0.06625, docFee: 699, titleFee: 60 },
+  { state: "New Mexico", code: "NM", rate: 0.05125, docFee: 399, titleFee: 13 },
+  { state: "New York", code: "NY", rate: 0.04, docFee: 175, titleFee: 50, note: "Plus local up to 4.875%" },
+  { state: "North Carolina", code: "NC", rate: 0.03, docFee: 599, titleFee: 58, note: "HUT 3%" },
+  { state: "North Dakota", code: "ND", rate: 0.05, docFee: 299, titleFee: 12 },
+  { state: "Ohio", code: "OH", rate: 0.0575, docFee: 250, titleFee: 15 },
+  { state: "Oklahoma", code: "OK", rate: 0.045, docFee: 699, titleFee: 33 },
+  { state: "Oregon", code: "OR", rate: 0, docFee: 0, titleFee: 98 },
+  { state: "Pennsylvania", code: "PA", rate: 0.06, docFee: 449, titleFee: 62 },
+  { state: "Rhode Island", code: "RI", rate: 0.07, docFee: 399, titleFee: 32 },
+  { state: "South Carolina", code: "SC", rate: 0.06, docFee: 599, titleFee: 15, note: "IMF max $500" },
+  { state: "South Dakota", code: "SD", rate: 0.045, docFee: 199, titleFee: 12 },
+  { state: "Tennessee", code: "TN", rate: 0.07, docFee: 599, titleFee: 29, note: "Single article cap $1,600" },
+  { state: "Texas", code: "TX", rate: 0.0625, docFee: 150, titleFee: 33, note: "6.25% motor vehicle sales" },
+  { state: "Utah", code: "UT", rate: 0.0485, docFee: 399, titleFee: 12 },
+  { state: "Vermont", code: "VT", rate: 0.06, docFee: 599, titleFee: 42, note: "6% purchase & use" },
+  { state: "Virginia", code: "VA", rate: 0.043, docFee: 599, titleFee: 15, note: "4.15% SUT" },
+  { state: "Washington", code: "WA", rate: 0.065, docFee: 200, titleFee: 35 },
+  { state: "West Virginia", code: "WV", rate: 0.06, docFee: 599, titleFee: 15 },
+  { state: "Wisconsin", code: "WI", rate: 0.05, docFee: 399, titleFee: 164 },
+  { state: "Wyoming", code: "WY", rate: 0.04, docFee: 299, titleFee: 15 },
+]
+
+const seedSafeguards: SafeguardItem[] = [
+  { control: "MFA everywhere", status: "pass", evidence: "100% coverage • Okta + hardware FIDO2 • 342 users", lastVerified: "2026-04-22T00:00:00Z" },
+  { control: "Encryption at rest & in transit", status: "pass", evidence: "AES-256 at rest (RDS/S3) • TLS 1.3 in transit • KMS rotation 90d", lastVerified: "2026-04-20T00:00:00Z" },
+  { control: "Access logs & monitoring", status: "pass", evidence: "Immutable audit • SIEM → Splunk 24/7 • 4.2M events/mo", lastVerified: "2026-04-21T00:00:00Z" },
+  { control: "Vendor oversight records", status: "pass", evidence: "42 vendors SOC2 reviewed • Vitu, RouteOne, Dealertrack contracts", lastVerified: "2026-04-18T00:00:00Z" },
+  { control: "Incident-response runbooks", status: "pass", evidence: "IR playbooks v4.1 • tabletop 2026-03 • RTO 1h / RPO 15m drills", lastVerified: "2026-03-15T00:00:00Z" },
+  { control: "FTC 500+-consumer breach workflow", status: "pass", evidence: "Auto-notify FTC + customers < 72h • credit monitoring queued", lastVerified: "2026-04-19T00:00:00Z" },
+  { control: "Least-privilege + vuln management", status: "pass", evidence: "RBAC 12 rooftops • pen test 2026-04-01 • 0 critical vulns • SIEM", lastVerified: "2026-04-01T00:00:00Z" },
+]
+
+const seedAccessLogs: ComplianceAuditEntry[] = [
+  { at: "2026-04-24T09:31:12Z", actor: "s.rivera@sovereign", action: "GET /v1/deals/8841", resource: "deal:8841", result: "allow", ip: "10.2.14.8" },
+  { at: "2026-04-24T09:28:04Z", actor: "dealer_consent:dtown", action: "GET /v1/vehicles?vin=JTMA*", resource: "vehicle:search", result: "allow", ip: "44.22.18.5" },
+  { at: "2026-04-24T09:22:47Z", actor: "admin@sovereign", action: "POST /v1/customers", resource: "customer:create", result: "allow", ip: "172.31.9.42" },
+  { at: "2026-04-24T08:55:17Z", actor: "d.alvarez@sovereign", action: "POST /v1/consent/opt-in", resource: "consent:recording", result: "success", ip: "10.2.14.11" },
+  { at: "2026-04-23T16:02:10Z", actor: "vitu.service@autocore", action: "POST /vitu/titl/submit", resource: "titr:VIT-8841", result: "success", ip: "52.8.14.2" },
+  { at: "2026-04-23T14:02:00Z", actor: "system:scheduler", action: "BACKUP verify restore", resource: "backup:immutable", result: "success", ip: "127.0.0.1" },
+]
+
+const seedComplianceState: ComplianceState = {
+  mfaCoverage: 100,
+  encryption: "AES-256",
+  accessLogs: seedAccessLogs,
+  safeguardsChecklist: seedSafeguards,
+  taxRules: seedTaxRules,
+  vituSubmissions: [
+    { vin: "JTMAAACA4PA042118", status: "submitted", tracking: "VIT-8841", lienPayoff: "queued • Wells Fargo $14,100 • E2 CIT", at: "2026-04-24T09:41:00Z", rooftop: "dtown" },
+  ],
+  soc: { soc1: "SOC 1 Type II", soc2: "SOC 2 Type II", soc1Status: "audit 2026-Q1 • clean opinion", soc2Status: "audit 2026-Q1 • controls effective • 12 rooftops" },
+  iso: { iso27001: "ISO 27001", iso27701: "ISO 27701", pathMonth: 8 },
+  privacyLaws: { count: 13, states: ["CA","VA","CO","CT","UT","TX","TN","OR","MT","IA","IN","DE","FL"], note: "§5.3 — 13 new state consumer-privacy laws 2026 • consent + DSAR workflows" },
+  penTest: { last: "2026-04-01", vulnCount: 0, siem: "Splunk • 24/7 SOC • least-privilege RBAC", leastPrivilege: "RBAC 7 roles • JIT elevation • 15m session TTL" },
+  backup: { immutable: true, rpo: "15m", rto: "1h", lastRestoreTest: "2026-04-19T06:00:00Z", tested: true },
+  drStrategy: "Post-CDK lesson • immutable backups • tested restore 2026-04-19 • cross-region failover us-west-2 • RPO 15m RTO 1h • no single-vendor lock",
+}
 
 function computeConsolidation(vehicles: typeof seedVehicles, deals: F1Deal[], repairOrders: typeof seedROs, parts: typeof seedParts) {
   const avgFloorplanFallback = 34800
@@ -484,6 +605,21 @@ export const useStore = create<AppState>((set, get)=> ({
   } as SystemHealth,
   selectedRooftop: "group" as const,
   lastPostedAt: new Date(Date.now() - 42 * 1000).toISOString(),
+  complianceState: seedComplianceState,
+  submitVitu: (vin: string) => {
+    const tracking = `VIT-${Math.floor(8000 + Math.random()*1000)}`
+    const at = new Date().toISOString()
+    const entry: VituSubmission = { vin, status: "submitted" as const, tracking, lienPayoff: "queued • Wells Fargo $14,100 • E2 CIT", at, rooftop: "dtown" }
+    const log: ComplianceAuditEntry = { at, actor: "vitu.service@autocore", action: `POST /vitu/titl/submit ${vin}`, resource: `titr:${tracking}`, result: "success", ip: "52.8.14.2" }
+    // push to complianceState via zustand set - captured closure set is available here
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(set as any)((s: AppState) => ({ complianceState: { ...s.complianceState, vituSubmissions: [...s.complianceState.vituSubmissions, entry], accessLogs: [log, ...s.complianceState.accessLogs].slice(0, 50) } }))
+    return tracking
+  },
+  exportSafeguards: () => {
+    // returns csv string for mock download
+    return `control,status,evidence,verified\n${seedSafeguards.map(s=> `"${s.control}","${s.status}","${s.evidence}","${s.lastVerified}"`).join("\n")}`
+  },
   migration: {
     extractors: [
       { id: "cdk", name: "CDK Drive", src: "CDK", status: "done" as const, coverage: "GL history • customers • vehicles • bins/on-order • open ROs/deals • employees • 15k rooftops", pct: 98.4, note: "15,000 rooftops post-outage" },

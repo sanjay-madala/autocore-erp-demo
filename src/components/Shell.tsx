@@ -306,7 +306,7 @@ export function Shell({ children }: { children?: React.ReactNode }) {
           <div className="hidden sm:block h-6 w-px bg-[var(--border)]" />
 
           {/* Notifications */}
-          <button className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm">
+          <button aria-label="Notifications" className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm">
             <Bell size={16} weight="regular" />
             <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center">
               <span className="absolute h-2.5 w-2.5 rounded-full bg-[var(--accent)] animate-ping opacity-20" />
@@ -345,6 +345,18 @@ export function Shell({ children }: { children?: React.ReactNode }) {
           </div>
         </div>
       )}
+      {/* E12 — Consent management • two-party (CA 2-party) disclosure auto — always visible */}
+      <div className="border-b border-[var(--border)] bg-white px-3 py-2 text-[11px] leading-snug text-[var(--text-secondary)]">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--accent-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--accent)]">
+            <ShieldCheck size={11} weight="fill" /> Consent • E12 §5.3
+          </span>
+          <span className="font-medium">CA is a two-party consent state</span>
+          <span className="hidden md:inline text-[var(--text-muted)]">— recording disclosure auto: “This call may be recorded for quality & training.” at 00:02 • opt-in captured • comms (SMS/email) + data-sharing ledger • 13 new state privacy laws • immutable</span>
+          <span className="rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-semibold text-white">2-party ✓</span>
+          <span className="ml-auto hidden rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-700 md:inline-flex">Disclosure auto • logged</span>
+        </div>
+      </div>
 
       <div className="flex">
         {/* ── Sidebar — desktop ── */}

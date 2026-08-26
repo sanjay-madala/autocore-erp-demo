@@ -26,6 +26,9 @@ export default function AIAgents(){
   const [copied,setCopied]=useState(false)
   const [playing,setPlaying]=useState(false)
   const [justRecoveredId,setJustRecoveredId]=useState<string | null>(null)
+  const [consentState, setConsentState] = useState("CA")
+  const twoPartyStates = ["CA","FL","PA","WA","IL","MD","MA","MT","NH","OR","CT","MI"] as const
+  const isTwoParty = (twoPartyStates as readonly string[]).includes(consentState)
   const aiCalls = useStore(s=> s.aiCalls)
   const systemHealth = useStore(s=> s.systemHealth)
   const receiveMissedCall = useStore(s=> s.receiveMissedCall)
@@ -93,6 +96,45 @@ export default function AIAgents(){
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* E12 — Consent management banner • two-party states (CA 2-party) */}
+      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col gap-2 rounded-xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${isTwoParty ? "border-[var(--accent-border)] bg-[var(--accent-muted)]" : "border-[var(--border)] bg-white"}`}>
+        <div className="flex items-center gap-3">
+          <span className={`grid h-8 w-8 place-items-center rounded-xl ${isTwoParty ? "bg-[var(--accent)] text-white" : "bg-zinc-900 text-white"}`}>
+            <ShieldCheck size={16} weight="fill" />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-semibold">Consent management — recording disclosure auto</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isTwoParty ? "bg-amber-500 text-black border border-amber-600" : "bg-emerald-500 text-white"}`}>{isTwoParty ? "TWO-PARTY" : "ONE-PARTY"}</span>
+              <span className="rounded-full bg-white border px-2 py-0.5 font-mono text-[10px] font-semibold">{consentState} {isTwoParty ? "• 2-party state" : "• 1-party state"}</span>
+              <span className="hidden rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-semibold text-white md:inline-flex">E12 • §5.3 • comms opt-in • data-sharing</span>
+            </div>
+            <div className="text-[11px] leading-snug text-[var(--text-secondary)]">
+              {isTwoParty ? (
+                <>
+                  <span className="font-semibold text-[var(--accent)]">CA 2-party:</span> “This call may be recorded for quality & training.” — auto-played at 00:02 • opt-in captured • transcript + recording logged • data-sharing consent ledger • 13-state privacy §5.3
+                </>
+              ) : (
+                <>
+                  One-party: disclosure notice at connect • recording + transcript • comms opt-ins (SMS/email) & data-sharing ledger auto — §5.3 compliant • 13 laws
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={consentState} onChange={(e) => setConsentState(e.target.value)} className="flex h-8 rounded-xl border border-[var(--border-strong)] bg-white px-2.5 text-[12px] font-[600]">
+            {["CA","TX","TN","NY","FL","PA","WA","IL","MI","CO","VA","CT","UT"].map((c) => (
+              <option key={c} value={c}>{c} {(["CA","FL","PA","WA","IL","MD","MA","MT","NH","OR","CT","MI"] as string[]).includes(c) ? "• 2-party" : "• 1-party"}</option>
+            ))}
+          </select>
+          <span className={`hidden md:inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${isTwoParty ? "bg-[var(--accent)] text-white" : "bg-white border text-[var(--text-secondary)]"}`}>
+            {isTwoParty ? <ShieldCheck size={12} weight="fill" /> : <CheckCircle size={12} weight="fill" />}
+            {isTwoParty ? "Disclosure auto" : "Notice auto"}
+          </span>
+        </div>
+      </motion.div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-muted)] px-4 py-3 text-[12px]">
         <span className="inline-flex items-center gap-1.5 font-semibold"><Robot size={16} className="text-[var(--accent)]" /> AI platform</span>

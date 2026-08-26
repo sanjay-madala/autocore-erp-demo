@@ -36,7 +36,7 @@ export default function F1Flow(){
           <div className="flex items-center gap-2"><h1 className="text-[22px] font-[700] tracking-[-0.03em]">F1 — New Vehicle Sale</h1><Badge variant="success" className="gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-700 animate-pulse" /> LIVE OBJECT</Badge><span className="hidden md:inline rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-semibold text-white">lead → desk → F&I → delivery → GL</span></div>
           <p className="mt-1 text-[12.5px] text-[var(--text-muted)]">One deal object through 12 steps — same record from website to showroom, no re-keying (97% fix). Mutations post to GL real-time.</p>
         </div>
-        <select value={deal.id} onChange={e=>setActiveDeal(e.target.value)} className="rounded-xl border border-[var(--border)] bg-white px-3 py-1.5 font-mono text-[12px]">
+        <select aria-label="Deal selector" value={deal.id} onChange={e=>setActiveDeal(e.target.value)} className="rounded-xl border border-[var(--border)] bg-white px-3 py-1.5 font-mono text-[12px]">
           {deals.map(d=> <option key={d.id} value={d.id}>{d.id} • {d.customerName} • {d.vehicleLabel} • {d.stage}</option>)}
         </select>
       </div>
@@ -99,7 +99,7 @@ export default function F1Flow(){
           {/* GL live posting */}
           <AnimatePresence mode="wait">
             <motion.div key={deal.stage+String(deal.glPosted)} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} className={cn("overflow-hidden rounded-xl border shadow-sm", deal.glPosted? "border-emerald-200 bg-emerald-50/60":"border-amber-200 bg-amber-50/50")}>
-              <div className={cn("flex items-center justify-between px-4 py-3 text-white", deal.glPosted? "bg-emerald-700":"bg-amber-600 text-white")}><span className="inline-flex items-center gap-2 text-[12px] font-semibold"><Bank size={14} weight="fill" /> GL posting — E2 real-time</span><Badge variant="neutral" className="bg-white text-zinc-900">{deal.glPosted? "POSTED • 0.8s":"PENDING"}</Badge></div>
+              <div className={cn("flex items-center justify-between px-4 py-3 text-white", deal.glPosted? "bg-emerald-700":"bg-amber-700 text-white")}><span className="inline-flex items-center gap-2 text-[12px] font-semibold"><Bank size={14} weight="fill" /> GL posting — E2 real-time</span><Badge variant="neutral" className="bg-white text-zinc-900">{deal.glPosted? "POSTED • 0.8s":"PENDING"}</Badge></div>
               <div className="p-4 grid gap-2 text-[12px]">
                 <div className="rounded-xl bg-white border p-3 font-mono text-[11px]">DELIVERY → floorplan payoff queued • CIT {deal.funding.cit? `$${deal.funding.cit.toLocaleString()}`:"—"} {deal.glPosted? "→ CLEARED • commission accrued":"• pending"} {deal.glPosted? "• 0 variance":""}</div>
                 <div className="flex flex-wrap gap-1.5 text-[11px]"><span className="rounded-full bg-white border px-2 py-0.5">JE-20441 Dr CIT / Cr Sales</span><span className="rounded-full bg-white border px-2 py-0.5">Schedules self-reconcile</span><span className={cn("rounded-full px-2 py-0.5 font-bold", deal.glPosted? "bg-emerald-700 text-white":"bg-zinc-900 text-white")}>{deal.glPosted? "CIT $0 • closed":"CIT $48,200 • funding"}</span></div>
