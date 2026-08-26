@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { vehicles, type Vehicle } from "@/data/vehicles"
+import { useStore } from "@/lib/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +21,7 @@ import {
   Signature,
   TrendUp,
   WarningCircle,
+  Copy,
   Wrench,
 } from "@phosphor-icons/react"
 
@@ -60,6 +62,20 @@ const PRODUCTS: Product[] = [
 type DisclosureStep = 1 | 2 | 3 | 4
 type ESig = "Draft" | "Sent" | "Viewed" | "Signed" | "Funded"
 
+// F11 — compliance sequence must be VSC → GAP → Tire → Dent (cannot skip)
+const REQUIRED_SEQ = ["vsc","gap","tire","dent"] as const
+type RequiredId = typeof REQUIRED_SEQ[number]
+type FiAuditEntry = { at: string; productId: string; productName: string; action: "presented"|"accepted"|"declined"; seq: number; disclosureStep: DisclosureStep; orderIndex: number }
+
+// PVR anomaly — per-manager penetration demo
+const PVR_MANAGERS = [
+  { mgr: "M. Park", penetration: 42, pvr: 1850, deals: 24 },
+  { mgr: "S. Rivera", penetration: 28, pvr: 1420, deals: 31 },
+  { mgr: "D. Alvarez", penetration: 31, pvr: 1380, deals: 18 },
+  { mgr: "J. Alvarez", penetration: 30, pvr: 1290, deals: 22 },
+] as const
+
+
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
 const fmt2 = (n: number) =>
@@ -91,6 +107,13 @@ export default function Desking() {
     { t: "09:22 EST", who: "Desk • S. Rivera (SM)", what: "Same record opened in desking • no re-key • F1 continuity ✓" },
     { t: "09:23 EST", who: "System", what: "Tax calc MI 6% • doc $260 + title $15 • lender rates live" },
   ])
+
+  // F11 — per-product audit with disclosure sequence enforcement
+  const [fiAudit, setFiAudit] = useState<FiAuditEntry[]>([])
+  const [auditExportOpen, setAuditExportOpen] = useState(false)
+  const [fiGuardMsg, setFiGuardMsg] = useState<string | null>(null)
+  const systemHealth = useStore(s=> s.systemHealth)
+  const degraded = systemHealth.degraded
 
   const vehicle: Vehicle | undefined = useMemo(() => vehicles.find((v) => v.id === selectedVehicleId), [selectedVehicleId])
   const lender: Lender | undefined = useMemo(() => LENDERS.find((l) => l.id === lenderId), [lenderId])
@@ -141,6 +164,48 @@ export default function Desking() {
     setAudit((a) => [...a, { t: now, who, what }])
   }
 
+  // F11 helpers — per-product log with disclosure sequence enforcement VSC→GAP→Tire→Dent
+  function logFiAudit(productId: string, action: FiAuditEntry["action"]) {
+    const prod = PRODUCTS.find(p=> p.id===productId)
+    const seq = (fiAudit.filter(f=> f.productId===productId).length + 1)
+    const orderIndex = REQUIRED_SEQ.indexOf(productId as RequiredId)
+    const at = new Date().toISOString()
+    const entry: FiAuditEntry = { at, productId, productName: prod?.name || productId, action, seq, disclosureStep: disclosure, orderIndex }
+    setFiAudit(a=> [...a, entry])
+    pushAudit(`F&I • ${action}`, `${prod?.name || productId} ${action} • ${new Date(at).toLocaleTimeString()} • seq ${fiAudit.length+1} • disclosure ${disclosure}`)
+  }
+  function canPresent(productId: string): { ok: boolean; reason?: string } {
+    const idx = REQUIRED_SEQ.indexOf(productId as RequiredId)
+    if (idx === -1) return { ok: true }
+    if (disclosure < 2) return { ok: false, reason: "Present disclosures first (step 1)" }
+    for (let i=0;i<idx;i++) {
+      const requiredPrev = REQUIRED_SEQ[i]
+      const hasDecision = fiAudit.some(e=> e.productId===requiredPrev && (e.action==="accepted" || e.action==="declined" || e.action==="presented"))
+      const hasChosen = chosen.has(requiredPrev) || fiAudit.some(e=> e.productId===requiredPrev)
+      if (!hasDecision && !hasChosen) {
+        const prevName = PRODUCTS.find(p=> p.id===requiredPrev)?.name || requiredPrev
+        const curName = PRODUCTS.find(p=> p.id===productId)?.name || productId
+        return { ok: false, reason: `F11 guardrail: must present ${prevName} before ${curName} — sequence VSC → GAP → Tire → Dent cannot be skipped` }
+      }
+    }
+    return { ok: true }
+  }
+  function handleFiToggle(productId: string, nextChecked: boolean) {
+    const guard = canPresent(productId)
+    if (!guard.ok) {
+      setFiGuardMsg(guard.reason || "Sequence blocked")
+      setTimeout(()=> setFiGuardMsg(null), 2800)
+      return
+    }
+    setFiGuardMsg(null)
+    const next = new Set(chosen)
+    if (nextChecked) next.add(productId)
+    else next.delete(productId)
+    setChosen(next)
+    logFiAudit(productId, nextChecked ? "accepted" : "declined")
+  }
+
+
   const container = {
     hidden: {},
     visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
@@ -182,6 +247,19 @@ export default function Desking() {
           </div>
         </div>
       </div>
+
+      {/* F18 degraded banner — read-heavy, lender cached */}
+      {degraded && (
+        <div className="mx-auto max-w-[1440px] px-5 pt-3 md:px-6">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[12px] text-amber-900">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-[700] tracking-widest"><WarningCircle size={14} weight="fill" className="text-amber-600" /> DEGRADED — {systemHealth.region} impairment → failover {systemHealth.failoverRegion}</span>
+            <span className="hidden md:inline">• core deal/RO write paths remain via {systemHealth.failoverRegion} • read-heavy degrade with banner</span>
+            <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] border border-amber-200">lender rates cached <span className="font-bold">“verify at funding”</span></span>
+            <span className="rounded-full bg-amber-500 px-2 py-0.5 font-mono text-[11px] font-bold text-white">queued {systemHealth.queuedMutations} sync • conflict resolution</span>
+            <a href={systemHealth.statusPage} className="underline font-mono text-[11px]">{systemHealth.statusPage.replace("https://","")}</a>
+          </div>
+        </div>
+      )}
 
       {/* ── Deal continuity banner — single record ── */}
       <div className="mx-auto max-w-[1440px] px-5 pt-4 md:px-6">
@@ -535,6 +613,13 @@ export default function Desking() {
                   <WarningCircle size={14} weight="fill" /> Present disclosures to unlock product selection (E4 guardrail).
                 </div>
               )}
+              <AnimatePresence>
+                {fiGuardMsg && (
+                  <motion.div initial={{opacity:0, y:-4}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-4}} className="mt-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+                    <WarningCircle size={14} weight="fill" /> {fiGuardMsg}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* product checkboxes */}
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -555,12 +640,7 @@ export default function Desking() {
                         type="checkbox"
                         checked={checked}
                         disabled={!canToggleProducts}
-                        onChange={(e) => {
-                          const next = new Set(chosen)
-                          if (e.target.checked) next.add(p.id)
-                          else next.delete(p.id)
-                          setChosen(next)
-                        }}
+                        onChange={(e) => handleFiToggle(p.id, e.target.checked)}
                         className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-[var(--accent)]"
                       />
                       <span className="min-w-0 flex-1">
@@ -572,6 +652,11 @@ export default function Desking() {
                           </span>
                         </span>
                         <span className="text-[11px] leading-snug text-[var(--text-muted)]">{p.desc} • {p.cat}</span>
+                        {fiAudit.filter(f=> f.productId===p.id).slice(-1).map(e=> (
+                          <span key={e.at} className="ml-1 inline-flex items-center gap-1 rounded-full bg-white px-1.5 py-0.5 font-mono text-[10px] border">
+                            {e.action} {new Date(e.at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})} • seq {e.seq}
+                          </span>
+                        ))}
                       </span>
                     </label>
                   )
@@ -588,6 +673,21 @@ export default function Desking() {
                   </span>
                 </div>
               )}
+              <AnimatePresence>
+                {auditExportOpen && (
+                  <motion.div initial={{height:0, opacity:0}} animate={{height:"auto", opacity:1}} exit={{height:0, opacity:0}} className="overflow-hidden mt-3 rounded-xl border border-[var(--border)] bg-zinc-950">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                      <span className="font-mono text-[11px] font-semibold text-white">F11 audit export — per-product timestamps + disclosure sequence</span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px] text-white">{fiAudit.length} events • {REQUIRED_SEQ.join(" → ")}</span>
+                    </div>
+                    <pre className="max-h-[280px] overflow-auto p-3 font-mono text-[11px] leading-relaxed text-zinc-300">{JSON.stringify({ disclosureSequence: { required: REQUIRED_SEQ, currentStep: disclosure, presented: fiAudit.filter(f=> f.action==="presented").map(f=> f.productId), accepted: fiAudit.filter(f=> f.action==="accepted").map(f=> ({ id: f.productId, at: f.at, seq: f.seq })), declined: fiAudit.filter(f=> f.action==="declined").map(f=> ({ id: f.productId, at: f.at, seq: f.seq })), fullLog: fiAudit }, pvr: { managers: PVR_MANAGERS, anomaly: (()=>{ const avg = PVR_MANAGERS.reduce((s,m)=> s+m.penetration,0)/PVR_MANAGERS.length; const max = PVR_MANAGERS.reduce((a,b)=> a.penetration > b.penetration ? a : b); return max.penetration-avg>8 ? { outlier: max.mgr, penetration: max.penetration, avg: Number(avg.toFixed(1)), delta: Number((max.penetration-avg).toFixed(1)) } : null})() }, systemHealth: degraded ? { region: systemHealth.region, failover: systemHealth.failoverRegion, queued: systemHealth.queuedMutations, rto: systemHealth.rto, rpo: systemHealth.rpo } : null }, null, 2)}</pre>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white/5 text-[11px] text-zinc-400">
+                      <ShieldCheck size={12} className="text-emerald-400" /> Immutable • exportable • per-product accept/decline with timestamps • disclosure sequence VSC→GAP→Tire→Dent enforced
+                      <button onClick={()=> navigator.clipboard.writeText(JSON.stringify(fiAudit))} className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900"><Copy size={12} /> Copy JSON</button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 

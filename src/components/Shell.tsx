@@ -25,6 +25,7 @@ import {
   Lightning,
 } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
+import { useStore } from "@/lib/store"
 import CommandCenter from "@/features/CommandCenter"
 import Inventory from "@/features/Inventory"
 import Desking from "@/features/Desking"
@@ -143,6 +144,8 @@ export function Shell({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [activeId, setActiveId] = React.useState<string>("f1-flow")
   const [rooftop, setRooftop] = React.useState<Rooftop>("All")
+  const systemHealth = useStore(s=> s.systemHealth)
+  const degraded = systemHealth.degraded
 
   // Close mobile drawer on resize to desktop
   React.useEffect(() => {
@@ -301,6 +304,15 @@ export function Shell({ children }: { children?: React.ReactNode }) {
           </div>
         </div>
       </header>
+      {/* F18 global degraded banner — across app */}
+      {degraded && (
+        <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
+          <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-[700] tracking-widest"><span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" /> DEGRADED MODE</span>
+            <span>{systemHealth.region} impairment → automated failover {systemHealth.failoverRegion} • status {systemHealth.statusPage.replace("https://","")} • core deal/RO writes remain via {systemHealth.failoverRegion} • read-heavy • lender rates “verify at funding” • queued {systemHealth.queuedMutations} • RTO {systemHealth.rto} • RPO {systemHealth.rpo}</span>
+          </div>
+        </div>
+      )}
 
       <div className="flex">
         {/* ── Sidebar — desktop ── */}
