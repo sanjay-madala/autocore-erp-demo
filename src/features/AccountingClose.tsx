@@ -2,7 +2,8 @@ import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle, Clock, WarningCircle, ArrowsClockwise, CurrencyDollar, FileText, SealCheck,
-  Bank, Receipt, ArrowRight, TrendUp, ClipboardText, Buildings, CaretRight, X, MagnifyingGlass, Info
+  Bank, Receipt, ArrowRight, TrendUp, ClipboardText, Buildings, CaretRight, X, MagnifyingGlass, Info,
+  ArrowSquareOut, CreditCard, Database, HardDrives, Lightning, Plugs
 } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -39,10 +40,16 @@ export default function AccountingClose(){
   const submitIncentiveClaim = useStore(s=> s.submitIncentiveClaim)
   const getGroupConsolidation = useStore(s=> s.getGroupConsolidation)
   const groupMeta = useStore(s=> s.groupMeta)
+  const vendorPayments = useStore(s=> s.vendorPayments)
+  const payVendor = useStore(s=> s.payVendor)
+  const dataWarehouse = useStore(s=> s.dataWarehouse)
+  const exportWarehouse = useStore(s=> s.exportWarehouse)
   const [active, setActive] = useState<number>(3)
   const [showConsolidated, setShowConsolidated] = useState(false)
   const [drillOpen, setDrillOpen] = useState(false)
   const [oemTab, setOemTab] = useState<"toyota"|"ford"|"honda">("toyota")
+  const [whExporting, setWhExporting] = useState(false)
+  const [whProgress, setWhProgress] = useState(0)
   const liveCit = deals.filter(d=> d.funding.status==="submitted").length
   const liveFunded = deals.filter(d=> d.funding.status==="funded" || d.glPosted).length
   const unsold = useMemo(()=> vehicles.filter(v=> v.status!=="sold"),[vehicles])
@@ -127,6 +134,35 @@ export default function AccountingClose(){
     const stacking = incentiveClaims.filter(c=> c.stackingConflict).length
     return { submitted, paid, mismatch, stacking, total: incentiveClaims.length }
   },[incentiveClaims])
+  const vendorSummary = useMemo(()=>{
+    const pending = vendorPayments.filter(v=> v.status==="pending")
+    const paid = vendorPayments.filter(v=> v.status==="paid")
+    const pendingAmt = pending.reduce((s,v)=> s+v.amount,0)
+    const paidAmt = paid.reduce((s,v)=> s+v.amount,0)
+    return { pending: pending.length, paid: paid.length, pendingAmt, paidAmt, total: vendorPayments.length }
+  },[vendorPayments])
+  const handleWarehouseExport = () => {
+    if (whExporting) return
+    setWhExporting(true)
+    setWhProgress(8)
+    let p = 8
+    const id = setInterval(()=>{
+      p = Math.min(100, p + Math.floor(Math.random()*18+8))
+      setWhProgress(p)
+      if (p>=100){
+        clearInterval(id)
+        exportWarehouse()
+        setTimeout(()=> { setWhExporting(false); setWhProgress(0) }, 900)
+      }
+    }, 220)
+  }
+  const whLastExportLabel = useMemo(()=>{
+    try {
+      const d = new Date(dataWarehouse.lastExportAt)
+      const pad = (n:number)=> String(n).padStart(2,"0")
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`
+    } catch { return "2026-04-23 14:02Z" }
+  },[dataWarehouse.lastExportAt])
   return (
     <div className="mx-auto max-w-[1440px] space-y-4 p-4 lg:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -277,6 +313,101 @@ export default function AccountingClose(){
               <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono shadow-sm"><Info size={12} /> Stacking-rule check: loyalty ⊘ conquest</span>
             </div>
           </div>
+
+          {/* ── E2-T12 Vendor Payments — Brex-class AP automation ── */}
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">
+              <span className="inline-flex items-center gap-2 text-[12px] font-semibold"><CreditCard size={14} className="text-emerald-400" /> Vendor Payments • AP Automation</span>
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 font-mono text-[10px] font-bold text-white">Brex • Partner</span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px]">{vendorSummary.pending} pending • {vendorSummary.paid} paid • GL &lt;60s</span>
+                <a href="#" onClick={e=> e.preventDefault()} className="hidden md:inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold text-zinc-900 hover:bg-zinc-100">Expense management <ArrowSquareOut size={10} /></a>
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[12px]">
+                <thead className="bg-[var(--surface-muted)] font-mono text-[10px] tracking-widest text-[var(--text-muted)]"><tr><th className="px-3 py-2">VENDOR</th><th className="px-3 py-2 text-right">AMOUNT</th><th className="px-3 py-2">DUE</th><th className="px-3 py-2">STATUS</th><th className="px-3 py-2 text-right">ACTION</th></tr></thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {vendorPayments.map(v=> (
+                    <tr key={v.id} className={cn("hover:bg-[var(--surface-hover)]", v.status==="pending" && "bg-amber-50/40")}>
+                      <td className="px-3 py-2.5">
+                        <div className="text-[12px] font-[550] leading-none">{v.vendor}</div>
+                        <div className="font-mono text-[11px] text-[var(--text-muted)]">{v.id} • {v.vendor.includes("Floorplan") ? "Floorplan lender" : v.vendor.includes("Parts") ? "Parts vendor" : v.vendor.includes("Snap-on") ? "Shop / Fixed Ops" : v.vendor.includes("ADP") ? "Payroll" : "SaaS / Utilities"}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono tabular-nums font-[650]">{fmt(v.amount)}</td>
+                      <td className="px-3 py-2.5 font-mono text-[11px]">{v.dueDate}</td>
+                      <td className="px-3 py-2.5"><Badge variant={v.status==="paid"?"success":"warning"} className={cn("capitalize", v.status==="paid" && "bg-emerald-600 text-white")}>{v.status}</Badge></td>
+                      <td className="px-3 py-2.5 text-right">
+                        {v.status==="pending" ? (
+                          <Button size="sm" className="h-7 px-3 text-[11px] bg-zinc-900 text-white hover:bg-zinc-800" onClick={()=> payVendor(v.id)}>Pay</Button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 font-mono text-[10px] font-bold text-emerald-700 border border-emerald-200"><CheckCircle size={10} weight="fill" /> Paid • GL</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 bg-[var(--surface-muted)] px-4 py-2.5 text-[11px] text-[var(--text-muted)]">
+              <span className="inline-flex items-center gap-1"><CreditCard size={12} className="text-[var(--accent)]" /> Brex partnership — card + bill pay • virtual cards • auto-reconcile • E2 GL real-time</span>
+              <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono shadow-sm">{fmt(vendorSummary.pendingAmt)} pending • {fmt(vendorSummary.paidAmt)} paid • Pay flips pending→paid + updates GL</span>
+              <a href="#" onClick={e=> e.preventDefault()} className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:underline md:hidden">Expense management <ArrowSquareOut size={12} /></a>
+            </div>
+          </div>
+
+          {/* ── E11-T08 Data Warehouse Export — Snowflake-class nightly + CDC ── */}
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+              <span className="inline-flex items-center gap-2 text-[12px] font-semibold"><Database size={14} className="text-[var(--accent)]" /> Data Warehouse Export • ELT</span>
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-bold text-white">E11 • Snowflake-class</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 font-mono text-[10px] font-bold text-white"><span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" /> CDC • RPO 15m</span>
+                <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] shadow-sm">1.2M rows • 4.2GB</span>
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid gap-2 md:grid-cols-3">
+                <div className="rounded-xl border border-[var(--border)] bg-white p-3">
+                  <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">LAST EXPORT</div>
+                  <div className="mt-1 font-mono text-[13px] font-[700]">{whLastExportLabel}</div>
+                  <div className="font-mono text-[11px] text-[var(--text-muted)]">{dataWarehouse.sizeGb.toFixed(1)}GB • {new Intl.NumberFormat("en-US").format(dataWarehouse.rows)} rows</div>
+                  <div className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">2026-04-23 14:02Z • nightly + streaming</div>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-white p-3">
+                  <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">STATUS • FRESHNESS</div>
+                  <div className="mt-1 flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /><span className="font-mono text-[13px] font-[700]">{dataWarehouse.status}</span></div>
+                  <div className="font-mono text-[11px] text-[var(--text-muted)]">Nightly + CDC streaming • p99 ≤60s</div>
+                  <div className="font-mono text-[10px] text-[var(--text-muted)]">RPO 15m • RTO 1h • no manual extracts</div>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="font-mono text-[10px] tracking-widest text-emerald-700">DESTINATIONS • SCHEMA</div>
+                  <div className="mt-1 font-mono text-[13px] font-[700] text-emerald-900">Snowflake • BigQuery</div>
+                  <div className="font-mono text-[11px] text-emerald-700">S3 parquet • 7yr retention</div>
+                  <div className="font-mono text-[10px] text-emerald-700">star + SCD2 • fact_deal • fact_ro</div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">EXPORT PIPELINE — nightly batch + CDC streaming</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] shadow-sm">ELT • dealer warehouse • OEM composite without exports</span>
+                </div>
+                <div className="mt-2 font-mono text-[11px] leading-relaxed text-[var(--text-muted)]">Schema: <span className="font-[650] text-[var(--text-primary)]">fact_deal • fact_ro • dim_vehicle • dim_customer SCD2 • fact_parts</span> • granular: deal lifecycle, GL, inventory, service, parts • nightly 02:00 + row-level CDC • RPO 15m • 1.2M rows • {dataWarehouse.sizeGb.toFixed(1)}GB</div>
+                {whExporting && (
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex justify-between font-mono text-[11px]"><span className="font-[600]">Exporting… {whProgress}%</span><span className="text-[var(--text-muted)]">{whProgress < 100 ? "CDC streaming → Snowflake" : "Completed ✓"}</span></div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white border border-[var(--border)]"><motion.div initial={{width:0}} animate={{width:`${whProgress}%`}} transition={{duration:0.25}} className="h-full rounded-full bg-[var(--accent)]" /></div>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1 gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800" onClick={handleWarehouseExport} disabled={whExporting}><Database size={12} weight="bold" /> {whExporting ? `Exporting ${whProgress}%` : "Export now"} <ArrowSquareOut size={12} /></Button>
+                <Button size="sm" variant="outline" className="flex-1 bg-white" disabled={whExporting}>Configure CDC</Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]"><span className="inline-flex items-center gap-1"><HardDrives size={12} /> Last export {whLastExportLabel} • {dataWarehouse.sizeGb.toFixed(1)}GB • {dataWarehouse.status} • {new Intl.NumberFormat("en-US").format(dataWarehouse.rows)} rows</span><span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono shadow-sm"><Lightning size={12} className="text-amber-500" /> RPO 15m • nightly + streaming</span></div>
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">

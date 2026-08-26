@@ -163,6 +163,10 @@ export type MigrationState = {
   cutoverScheduledAt: string | null
 }
 
+// ── E2-T12 Vendor Payments (Brex-class) + E11-T08 Data Warehouse (Snowflake-class) ──
+export type VendorPayment = { id: string; vendor: string; amount: number; status: "pending" | "paid"; dueDate: string }
+export type DataWarehouseState = { lastExportAt: string; status: string; rows: number; sizeGb: number }
+
 // ── F8 Multi-rooftop Close + F14 Incentives ──
 export type RooftopMeta = { id: "dtown"|"north"|"westside"; name: string; brand: string; oemFormat: string; region: string }
 export const groupMeta = {
@@ -222,6 +226,56 @@ export type GroupConsolidationRow = {
   warrantyAR: number
   transfers: number
 }
+
+// ── T1 Conversational BI — platform-wide NL query over unified store ("Ask. Decide. Act.") ──
+export type ConversationalBIRow = Record<string, string | number>
+export type ConversationalBIEntry = {
+  id: string
+  query: string
+  answer: string
+  sql: string
+  rows: ConversationalBIRow[]
+  at: string
+}
+export type ConversationalBIState = {
+  history: ConversationalBIEntry[]
+}
+
+// ── E10 Copilot — F&I (E10-T08) & Service (E10-T09) — P1 — seeded from ai.ts COP-002 etc. ──
+export type CopilotSuggestionItem = {
+  id: string
+  type: "fi" | "service"
+  dealId?: string
+  roId?: string
+  suggestion: string
+  expectedLift: number
+  guardrailOk: boolean
+  accepted?: boolean
+  dismissed?: boolean
+}
+
+export const seedCopilotSuggestions: CopilotSuggestionItem[] = [
+  {
+    id: "COP-002",
+    type: "fi",
+    dealId: "D-1042",
+    suggestion: "Bump rate 6.49→6.99 + add GAP → PVR +$620, payment +$11, within cap $3,200 ✓",
+    expectedLift: 620,
+    guardrailOk: true,
+    accepted: false,
+    dismissed: false,
+  },
+  {
+    id: "COP-003",
+    type: "service",
+    roId: "RO-1001",
+    suggestion: "Deferred brake front 4mm from last RO-8812 + mileage since 11k — Add to MPI • +$230 avg",
+    expectedLift: 230,
+    guardrailOk: true,
+    accepted: false,
+    dismissed: false,
+  },
+]
 
 export type AppState = {
   vehicles: typeof seedVehicles
@@ -294,6 +348,11 @@ export type AppState = {
   reconcileIncentiveClaim: (claimId: string, status: IncentiveClaimStatus) => void
   getGroupConsolidation: () => { rows: GroupConsolidationRow[]; group: GroupConsolidationRow; eliminations: number; transferDetails: { vin: string; stockNo: string; from: string; to: string; at: string }[] }
   getLiveKpiDaily: () => import("@/data/analytics").KpiPoint[]
+  // E2-T12 Vendor Payments + E11-T08 Data Warehouse
+  vendorPayments: VendorPayment[]
+  dataWarehouse: DataWarehouseState
+  payVendor: (id: string) => void
+  exportWarehouse: () => void
   // F10 Migration
   runExtractor: (id: string) => void
   fixMapping: (field: string) => void
@@ -301,6 +360,15 @@ export type AppState = {
   advanceParallelDay: () => void
   executeCutover: () => void
   rollback: () => void
+  // E10 Copilot P1 — F&I (T08) + Service (T09) — deal-structure vs lender guardrails + deferred/mileage
+  copilotSuggestions: CopilotSuggestionItem[]
+  acceptCopilot: (id: string) => void
+  dismissCopilot: (id: string) => void
+  generateCopilotForDeal: (dealId: string) => void
+  generateCopilotForRO: (roId: string) => void
+  // T1 Conversational BI
+  conversationalBI: ConversationalBIState
+  queryBI: (nl: string) => ConversationalBIEntry
 }
 
 const now = () => new Date().toISOString().slice(11,19)
@@ -465,6 +533,23 @@ const seedComplianceState: ComplianceState = {
   drStrategy: "Post-CDK lesson • immutable backups • tested restore 2026-04-19 • cross-region failover us-west-2 • RPO 15m RTO 1h • no single-vendor lock",
 }
 
+// ── E2-T12 Brex-class: vendor payments (AP automation + expense management) ──
+const seedVendorPayments: VendorPayment[] = [
+  { id: "VP-1001", vendor: "Ally Financial — Floorplan Lender", amount: 68546, status: "pending", dueDate: "2026-04-28" },
+  { id: "VP-1002", vendor: "Toyota Genuine Parts — Parts Vendor", amount: 14200, status: "pending", dueDate: "2026-04-25" },
+  { id: "VP-1003", vendor: "Snap-on Industrial — Shop Equipment", amount: 8400, status: "pending", dueDate: "2026-04-30" },
+  { id: "VP-1004", vendor: "ADP — Payroll & Benefits", amount: 41200, status: "paid", dueDate: "2026-04-24" },
+  { id: "VP-1005", vendor: "Duke Energy + Reynolds DMS — SaaS & Utilities", amount: 12850, status: "pending", dueDate: "2026-04-27" },
+]
+
+// ── E11-T08 Snowflake-class: nightly + CDC streaming to dealer warehouse ──
+const seedDataWarehouse: DataWarehouseState = {
+  lastExportAt: "2026-04-23T14:02:00Z",
+  status: "CDC • RPO 15m",
+  rows: 1_200_000,
+  sizeGb: 4.2,
+}
+
 function computeConsolidation(vehicles: typeof seedVehicles, deals: F1Deal[], repairOrders: typeof seedROs, parts: typeof seedParts) {
   const avgFloorplanFallback = 34800
   const transferDetails: { vin: string; stockNo: string; from: string; to: string; at: string }[] = []
@@ -515,6 +600,90 @@ function computeConsolidation(vehicles: typeof seedVehicles, deals: F1Deal[], re
   }), { rooftopId:"group", rooftopName:"GROUP CONSOLIDATED", brand:"All", units:0, frontGross:0, backGross:0, svcGross:0, partsGross:0, citOpen:0, floorplan:0, warrantyAR:0, transfers:0 })
   const eliminations = transferDetails.length===0?12400: transferDetails.length*3100
   return { rows, group, eliminations, transferDetails }
+}
+
+// ── T1 NL parser — keyword matching over unified store (no LLM) ──
+function resolveBIQuery(nl: string, _get: () => AppState): { answer: string; sql: string; rows: ConversationalBIRow[] } {
+  const q = nl.toLowerCase()
+  const has = (...keys: string[]) => keys.some(k => q.includes(k))
+  // Gross per tech this month — flag Rivera
+  if ((has("gross") && has("tech")) || q.includes("per tech") || q.includes("technician")) {
+    return {
+      answer: "Tech Rivera — $18.4k gross this month • flagged below 75% threshold • efficiency 68% • review queued • top: W. Schmidt $24.1k, J. Walker $21.3k.",
+      sql: "SELECT technician, SUM(gross) AS gross, AVG(efficiency) FROM repair_orders\nWHERE date_trunc('month', closed_at) = date_trunc('month', now())\nGROUP BY technician ORDER BY gross DESC;",
+      rows: [
+        { technician: "W. Schmidt — BMW Master", gross: "$24,100", hours: 68.4, eff: "142%", flag: "—" },
+        { technician: "J. Walker — Ford Senior", gross: "$21,300", hours: 61.5, eff: "131%", flag: "—" },
+        { technician: "R. Ortiz — Toyota MDT", gross: "$19,200", hours: 56.2, eff: "118%", flag: "—" },
+        { technician: "Rivera — Westside", gross: "$18,400", hours: 42.0, eff: "68%", flag: "⚠️ below 75%" },
+      ],
+    }
+  }
+  // Aged inventory >45 days — count 4
+  if (has("aged") || (has("inventory") && (q.includes("45") || q.includes(">45") || q.includes("aging")))) {
+    return {
+      answer: "4 units aged >45 days — carrying cost $12.4k • 2 at North (F30881 Mustang GT 62d — wholesale review, T23204 RAV4 47d), 1 at Dtown (Highlander 19d borderline), 1 pending recon • curtailment $1,840/mo.",
+      sql: "SELECT stock_no, vehicle, age_days, lot, floorplan FROM vehicles\nWHERE status = 'stock' AND aging_days > 45\nORDER BY aging_days DESC;",
+      rows: [
+        { stock: "F30881", vehicle: "2020 Mustang GT Premium", age: "62 days", lot: "Showroom — Podium", floorplan: "$31,200" },
+        { stock: "T23204", vehicle: "2022 RAV4 XLE AWD", age: "47 days", lot: "Back Lot C04", floorplan: "$24,200" },
+        { stock: "W40198", vehicle: "2022 BMW 330i xDrive", age: "38 days → 45d flag soon", lot: "BMW CPO Row E02", floorplan: "$29,800" },
+        { stock: "T23157", vehicle: "2023 Highlander Limited", age: "19 days", lot: "Front Line A12", floorplan: "$34,800" },
+      ],
+    }
+  }
+  // CIT aging — $142k 7 deals
+  if (has("cit")) {
+    return {
+      answer: "$142k CIT across 7 deals — oldest D-1050 23 days • 2 deals >30 days overdue • avg 14.3 days • funding queue: 3 with Wells, 2 Dealertrack, 2 TFS • next payoff $34.8k.",
+      sql: "SELECT deal_id, customer, cit_amount, age_days, lender FROM deals\nWHERE funding_status = 'submitted'\nORDER BY cit_age DESC;",
+      rows: [
+        { deal: "D-1050", customer: "Marcus Chen", cit: "$28,400", age: "23 days", lender: "Wells", status: "overdue" },
+        { deal: "D-1052", customer: "Priya Nair", cit: "$24,800", age: "19 days", lender: "Dealertrack", status: "overdue" },
+        { deal: "D-1044", customer: "Robert Owens", cit: "$22,100", age: "16 days", lender: "Ford Credit", status: "pending" },
+        { deal: "D-1047", customer: "A. Johnson", cit: "$19,600", age: "11 days", lender: "TFS", status: "pending" },
+        { deal: "D-1048", customer: "K. Tanaka", cit: "$18,900", age: "8 days", lender: "Wells", status: "pending" },
+        { deal: "D-1051", customer: "S. Martinez", cit: "$16,200", age: "6 days", lender: "Ally", status: "pending" },
+        { deal: "D-1049", customer: "E. Carter", cit: "$12,000", age: "3 days", lender: "BMW FS", status: "pending" },
+      ],
+    }
+  }
+  // Missed calls today — 3
+  if (has("missed") || (has("calls") && has("today"))) {
+    const todayCount = 3
+    return {
+      answer: `3 missed calls today — 2 recovered by AI voice (67% recovery) • 1 callback task queued for 09:45 • avg answer 22s • all transcripts on customer timeline • 30–40% drop recovered.`,
+      sql: "SELECT id, caller, intent, score, verdict FROM ai_calls\nWHERE date(created_at) = current_date AND missed = true\nORDER BY created_at DESC;",
+      rows: [
+        { id: "C-883", caller: "615-555-0199 Grace Kim", intent: "Service", score: 89, verdict: "Booked Tue 10" },
+        { id: "C-882", caller: "248-555-0311 Amara Okafor", intent: "Service", score: 88, verdict: "Booked Tue 10" },
+        { id: "C-881", caller: "248-555-0143 Marcus Chen", intent: "Sales", score: 92, verdict: "Bridged → J. Alvarez" },
+      ].slice(0, todayCount),
+    }
+  }
+  // Group GP MTD — $312k
+  if ((has("group") && (has("gp") || has("gross"))) || (has("mtd") && has("gp")) || q.includes("group gp")) {
+    return {
+      answer: "$312k Group GP MTD — 184 units • $1,696 PVR • +4.2% vs prior • Front $182k • Back $88k • Service $28k • Parts $14k • 3 rooftops consolidated • GL balanced to penny.",
+      sql: "SELECT rooftop, SUM(front_gross + back_gross + svc_gross + parts_gross) AS gp\nFROM gl_consolidation\nWHERE date_trunc('month', close_date) = date_trunc('month', now())\nGROUP BY rooftop;",
+      rows: [
+        { rooftop: "Downtown Toyota", units: 64, gp: "$112,400", pv: "$1,756" },
+        { rooftop: "North Ford", units: 58, gp: "$98,200", pv: "$1,693" },
+        { rooftop: "Westside Honda/BMW", units: 62, gp: "$101,400", pv: "$1,635" },
+        { rooftop: "GROUP", units: 184, gp: "$312,000", pv: "$1,696" },
+      ],
+    }
+  }
+  // Fallback — generic NL coverage hint
+  return {
+    answer: `Found 3 matches for “${nl}” across unified store — customers, vehicles, deals, ROs, GL. Try: “Gross per tech this month?”, “Aged inventory >45 days?”, “CIT aging?”, “Missed calls today?”, “Group GP MTD?”.`,
+    sql: `SELECT * FROM unified_store\nWHERE search_vector @@ plainto_tsquery('${nl.replace(/'/g, "''").slice(0, 64)}')\nLIMIT 20;`,
+    rows: [
+      { source: "customers", match: "Marisol Delgado • F-884102 • repeat", score: "92%" },
+      { source: "vehicles", match: "T24081 • Camry XSE • Front Line A12", score: "88%" },
+      { source: "deals", match: "D-1041 • Marcus Chen • pencil $2,410", score: "85%" },
+    ],
+  }
 }
 
 export const useStore = create<AppState>((set, get)=> ({
@@ -606,6 +775,9 @@ export const useStore = create<AppState>((set, get)=> ({
   selectedRooftop: "group" as const,
   lastPostedAt: new Date(Date.now() - 42 * 1000).toISOString(),
   complianceState: seedComplianceState,
+  vendorPayments: seedVendorPayments,
+  dataWarehouse: seedDataWarehouse,
+  copilotSuggestions: seedCopilotSuggestions,
   submitVitu: (vin: string) => {
     const tracking = `VIT-${Math.floor(8000 + Math.random()*1000)}`
     const at = new Date().toISOString()
@@ -1257,4 +1429,143 @@ export const useStore = create<AppState>((set, get)=> ({
       }),
     }
   }),
+  // ── E10 Copilot — F&I guardrail + Service deferred/mileage ──
+  acceptCopilot: (id: string)=> set(s=> {
+    const item = s.copilotSuggestions.find(c=> c.id===id)
+    if(!item) return s
+    const updated = s.copilotSuggestions.map(c=> c.id===id ? { ...c, accepted: true, dismissed: false } : c)
+    const extra: Partial<AppState> = {}
+    // F&I guardrail: respect menu caps $3,200 — only suggest within cap (guardrailOk already enforced seed)
+    if(item.type==="fi" && item.dealId){
+      ;(extra as { deals: typeof s.deals }).deals = s.deals.map(d=>{
+        if(d.id!==item.dealId) return d
+        const newFiMenu = { ...d.fiMenu, GAP: true }
+        let newPencil = d.pencil
+        if(d.pencil){
+          const bumpedRate = Number((d.pencil.rate + 0.5).toFixed(2))
+          // enforce guardrail: if would exceed cap, keep guardrailOk false and don't apply
+          // cap $3,200 — current total + expectedLift must be <= cap
+          const currentFiTotal = Object.entries(d.fiMenu).filter(([,v])=> v).length * 620 // rough
+          const willExceed = currentFiTotal + item.expectedLift > 3200
+          if(willExceed && !item.guardrailOk) return d
+          newPencil = { ...d.pencil, rate: bumpedRate > 6.99 ? 6.99 : bumpedRate, gross: (d.pencil.gross ?? 0) + item.expectedLift }
+        }
+        return { ...d, fiMenu: newFiMenu, pencil: newPencil, timeline: [...d.timeline, { t: new Date().toISOString().slice(11,19), label: `F&I Copilot accepted • ${item.suggestion} • PVR +$${item.expectedLift} • guardrail ✓` }] }
+      })
+    }
+    if(item.type==="service" && item.roId){
+      const roId = item.roId
+      ;(extra as { repairOrders: typeof s.repairOrders }).repairOrders = s.repairOrders.map(r=>{
+        if(r.id!==roId) return r
+        const mpi = (r as unknown as { mpiItems: unknown[] }).mpiItems as unknown as Record<string, unknown>[]
+        const exists = mpi.some(m=> (m as { id: string }).id===`MPI-COP-${roId}`)
+        if(exists){
+          const nextMpi = mpi.map(m=> (m as { id: string }).id===`MPI-COP-${roId}` ? { ...(m as object), approved: true, status: "approved" } as unknown as typeof m : m)
+          return { ...r, mpiItems: nextMpi as unknown as typeof r.mpiItems, status: "waiting_approval" as unknown as typeof r.status }
+        }
+        const newItem = {
+          id: `MPI-COP-${roId}`,
+          category: "safety" as const,
+          item: "Front Brake Pads — deferred 4mm (RO-8812 • 11k mi ago)",
+          status: "red" as const,
+          measurement: "4mm",
+          spec: "Min 2mm • 81.2k mi (mileage-based trigger)",
+          recommendation: "Replace pads + resurface rotors — deferred from RO-8812 (11k mi ago) + mileage-based 81k • +$230 avg RO",
+          laborOp: "BRK-F-01",
+          partsRequired: ["04465-33150","43512-33150 x2"],
+          laborHours: 1.2,
+          retailAmount: item.expectedLift,
+          photoUrl: "https://picsum.photos/seed/mpi-brake-cop/600/400",
+          videoUrl: undefined,
+          approved: true,
+        }
+        return { ...r, mpiItems: [...(r.mpiItems as unknown as unknown[]), newItem] as unknown as typeof r.mpiItems, status: "waiting_approval" as unknown as typeof r.status }
+      })
+    }
+    return { copilotSuggestions: updated, ...extra } as Partial<AppState> as AppState
+  }),
+  dismissCopilot: (id: string)=> set(s=> ({
+    copilotSuggestions: s.copilotSuggestions.map(c=> c.id===id ? { ...c, dismissed: true, accepted: false } : c)
+  })),
+  generateCopilotForDeal: (dealId: string)=> set(s=>{
+    const exists = s.copilotSuggestions.some(c=> c.dealId===dealId && c.type==="fi" && !c.dismissed)
+    if(exists) return s
+    const deal = s.deals.find(d=> d.id===dealId)
+    if(!deal) return s
+    const newId = `COP-FI-${dealId}-${Date.now().toString().slice(-4)}`
+    const baseRate = deal.pencil?.rate ?? 6.49
+    const nextRate = (baseRate + 0.5).toFixed(2)
+    const suggestion = `Bump rate ${baseRate.toFixed(2)}→${nextRate} + add GAP → PVR +$620, payment +$11, within cap $3,200 ✓`
+    // guardrail: never suggest beyond cap $3,200 — check current PVR
+    const fiCount = Object.values(deal.fiMenu).filter(Boolean).length
+    const guardrailOk = (fiCount * 899 + 620) <= 3200
+    const newItem: CopilotSuggestionItem = {
+      id: newId,
+      type: "fi",
+      dealId,
+      suggestion: guardrailOk ? suggestion : `Rate ${baseRate.toFixed(2)}→${nextRate} + GAP — exceeds cap $3,200 ✗ — not suggested`,
+      expectedLift: guardrailOk ? 620 : 0,
+      guardrailOk,
+      accepted: false,
+      dismissed: false,
+    }
+    if(!guardrailOk) return s
+    return { copilotSuggestions: [...s.copilotSuggestions, newItem] }
+  }),
+  generateCopilotForRO: (roId: string)=> set(s=>{
+    const exists = s.copilotSuggestions.some(c=> c.roId===roId && c.type==="service" && !c.dismissed)
+    if(exists) return s
+    const ro = s.repairOrders.find(r=> r.id===roId)
+    if(!ro) return s
+    const newId = `COP-SVC-${roId}-${Date.now().toString().slice(-4)}`
+    const mileage = ro.vehicle.mileage
+    const suggestion = `Deferred brake front 4mm from last RO-8812 + mileage since 11k (${mileage.toLocaleString()} mi) — Add to MPI • +$230 avg`
+    const newItem: CopilotSuggestionItem = {
+      id: newId,
+      type: "service",
+      roId,
+      suggestion,
+      expectedLift: 230,
+      guardrailOk: true,
+      accepted: false,
+      dismissed: false,
+    }
+    return { copilotSuggestions: [...s.copilotSuggestions, newItem] }
+  }),
+  payVendor: (id: string) => set(s => {
+    const nowIso = new Date().toISOString()
+    const entry = s.vendorPayments.find(v => v.id === id)
+    if (!entry || entry.status === "paid") return s
+    const nextPayments = s.vendorPayments.map(v => v.id === id ? { ...v, status: "paid" as const } : v)
+    const log: ComplianceAuditEntry = { at: nowIso, actor: "ap.service@autocore", action: `POST /v1/payments/vendor ${id} $${entry.amount} → GL`, resource: `payment:${id}`, result: "success" as const, ip: "10.2.14.22" }
+    return {
+      vendorPayments: nextPayments,
+      lastPostedAt: nowIso,
+      complianceState: { ...s.complianceState, accessLogs: [log, ...s.complianceState.accessLogs].slice(0, 50) },
+    }
+  }),
+  exportWarehouse: () => set(s => {
+    const nowIso = new Date().toISOString()
+    const nextRows = s.dataWarehouse.rows + Math.floor(Math.random() * 8000 + 2000)
+    const nextGb = Math.round((s.dataWarehouse.sizeGb + Math.random() * 0.08) * 100) / 100
+    const log: ComplianceAuditEntry = { at: nowIso, actor: "system:scheduler", action: `WAREHOUSE EXPORT ${nextRows} rows → Snowflake/BigQuery`, resource: "warehouse:export", result: "success" as const, ip: "127.0.0.1" }
+    return {
+      dataWarehouse: { lastExportAt: nowIso, status: "CDC • RPO 15m", rows: nextRows, sizeGb: nextGb },
+      complianceState: { ...s.complianceState, accessLogs: [log, ...s.complianceState.accessLogs].slice(0, 50) },
+    }
+  }),
+  conversationalBI: { history: [] },
+  queryBI: (nl: string) => {
+    const resolved = resolveBIQuery(nl, get)
+    const entry: ConversationalBIEntry = {
+      id: `BI-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      query: nl,
+      answer: resolved.answer,
+      sql: resolved.sql,
+      rows: resolved.rows,
+      at: new Date().toISOString(),
+    }
+    set(s => ({ conversationalBI: { history: [...s.conversationalBI.history, entry] } }))
+    return entry
+  },
 }))

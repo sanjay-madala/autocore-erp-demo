@@ -19,6 +19,7 @@ import {
   SealCheck,
   ShieldCheck,
   Signature,
+  Sparkle,
   TrendUp,
   WarningCircle,
   Copy,
@@ -159,6 +160,11 @@ export default function Desking() {
   const submitVituStore = useStore((s) => s.submitVitu)
   const [vituTracking, setVituTracking] = useState<string | null>(complianceState.vituSubmissions[0]?.tracking ?? null)
   const [vituSubmitted, setVituSubmitted] = useState<boolean>(complianceState.vituSubmissions.length > 0)
+  // E10-T08 F&I Copilot — deal-structure vs lender rate sheets + guardrails
+  const copilotSuggestions = useStore((s) => s.copilotSuggestions)
+  const acceptCopilot = useStore((s) => s.acceptCopilot)
+  const dismissCopilot = useStore((s) => s.dismissCopilot)
+  const generateCopilotForDeal = useStore((s) => s.generateCopilotForDeal)
 
   const vehicle: Vehicle | undefined = useMemo(() => vehicles.find((v) => v.id === selectedVehicleId), [selectedVehicleId])
   const lender: Lender | undefined = useMemo(() => LENDERS.find((l) => l.id === lenderId), [lenderId])
@@ -622,8 +628,133 @@ export default function Desking() {
 
         {/* ── F&I docuPAD + audit + e-sign ── */}
         <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.85fr]">
-          {/* docuPAD menu */}
-          <div className="surface overflow-hidden p-0">
+          <div className="space-y-4">
+            {/* E10-T08 — F&I Copilot — deal-structure vs lender rate sheets + guardrails */}
+            {(() => {
+              const fiCopilots = copilotSuggestions.filter((c) => c.type === "fi" && !c.dismissed)
+              const acceptedFi = copilotSuggestions.filter((c) => c.type === "fi" && c.accepted)
+              const totalAcceptedLift = acceptedFi.reduce((s, c) => s + (c.expectedLift || 0), 0)
+              const hasCopilot = fiCopilots.length > 0
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] as const }}
+                  className="surface overflow-hidden p-0 border-[var(--accent-border)] shadow-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--accent-border)] bg-[var(--accent-muted)] px-4 py-3">
+                    <h3 className="inline-flex items-center gap-2 text-[13px] font-semibold text-[var(--accent)]">
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--accent)] text-white">
+                        <Sparkle size={14} weight="fill" />
+                      </span>
+                      F&I Copilot
+                      <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-[var(--accent)] border border-[var(--accent-border)]">
+                        E10-T08 • lender guardrails
+                      </span>
+                      <span className="hidden rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white md:inline-flex">ROI proof</span>
+                    </h3>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                      <ShieldCheck size={12} weight="fill" className="text-emerald-600" /> Guardrail ✓ • cap $3,200
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    {!hasCopilot ? (
+                      <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)] p-4 text-center">
+                        <div className="text-[12px] font-semibold text-[var(--text-secondary)]">No active F&I suggestion</div>
+                        <div className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">Generate a deal-structure suggestion for the current pencil — respects menu caps</div>
+                        <Button size="sm" className="mt-3 gap-1.5" onClick={() => generateCopilotForDeal("D-1042")}>
+                          <Sparkle size={12} weight="fill" /> Generate for D-1042
+                        </Button>
+                        {acceptedFi.length > 0 && (
+                          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 font-mono text-[11px] font-semibold text-emerald-700">
+                            <TrendUp size={12} weight="bold" /> ROI • {acceptedFi.length} accepted • +{fmt(totalAcceptedLift)} PVR — proof logged
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {fiCopilots.map((c) => (
+                          <div key={c.id} className={`rounded-xl border p-3 ${c.accepted ? "border-emerald-200 bg-emerald-50" : "border-[var(--border)] bg-[var(--surface-muted)]/60"}`}>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-bold tracking-widest text-white">COP • {c.id}</span>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.guardrailOk ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"}`}>
+                                <ShieldCheck size={11} weight="fill" /> {c.guardrailOk ? "within cap $3,200 ✓" : "exceeds cap ✗ — not suggested"}
+                              </span>
+                              <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-medium shadow-sm border border-[var(--border)]">
+                                <Bank size={10} /> TFS 6.49% sheet • live
+                              </span>
+                              {c.accepted && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-bold text-white"><CheckCircle size={11} weight="fill" /> Accepted</span>}
+                            </div>
+                            <div className={`mt-2 rounded-xl px-3 py-2.5 font-mono text-[13px] font-semibold leading-snug ${c.accepted ? "bg-emerald-500 text-white" : "bg-zinc-900 text-white"}`}>
+                              {c.suggestion}
+                              <span className="ml-1.5 hidden font-mono text-[11px] font-medium text-white/70 sm:inline">• lender rate sheets + compliance guardrails</span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-[var(--text-muted)]">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 border border-[var(--border)]"><TrendUp size={11} className="text-emerald-600" /> PVR +{fmt(c.expectedLift)} • +$11/mo</span>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 border border-[var(--border)]">menu cap $3,200 ✓ • not beyond guardrail</span>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 border border-[var(--border)]"><Lightning size={10} weight="fill" className="text-[var(--accent)]" /> Acceptance tracked</span>
+                            </div>
+                            {!c.accepted ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5"
+                                  onClick={() => {
+                                    acceptCopilot(c.id)
+                                    setChosen((prev) => {
+                                      const next = new Set(prev)
+                                      next.add("gap")
+                                      return next
+                                    })
+                                    pushAudit("F&I Copilot • E10-T08", `Accepted • ${c.suggestion} • PVR +$${c.expectedLift} • payment +$11 • within cap $3,200 ✓ • lender guardrail enforced`)
+                                    logFiAudit("gap", "accepted")
+                                  }}
+                                >
+                                  <CheckCircle size={14} weight="fill" /> Accept
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    dismissCopilot(c.id)
+                                    pushAudit("F&I Copilot • E10-T08", `Dismissed • ${c.id} • not applied • guardrail respected • ROI not counted`)
+                                  }}
+                                >
+                                  Dismiss
+                                </Button>
+                                <span className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] text-[var(--text-faint)]">
+                                  <Wrench size={10} /> respects menu caps
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
+                                  <CheckCircle size={12} weight="fill" /> Applied • GAP added • pencil updated • PVR +{fmt(c.expectedLift)}
+                                </span>
+                                <Button size="sm" variant="outline" onClick={() => dismissCopilot(c.id)}>
+                                  Dismiss
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {/* ROI proof strip */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-muted)] px-3 py-2">
+                          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-[var(--accent)]">
+                            <TrendUp size={12} weight="bold" /> ROI proof • {acceptedFi.length} accepted • {acceptedFi.length === 0 ? "no lift yet" : `+${fmt(totalAcceptedLift)} PVR cumulative`}
+                          </span>
+                          <span className="font-mono text-[11px] text-[var(--text-muted)]">
+                            guardrail never exceeds cap $3,200 • acceptance tracked for E10
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })()}
+            {/* docuPAD menu */}
+            <div className="surface overflow-hidden p-0">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">
               <h3 className="inline-flex items-center gap-2 text-[13px] font-semibold">
                 <ClipboardText size={16} weight="fill" className="text-white" /> F&I Menu • docuPAD-style
@@ -784,6 +915,7 @@ export default function Desking() {
                 )}
               </AnimatePresence>
             </div>
+          </div>
           </div>
 
           {/* audit + e-sign + deal JSON */}

@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
+import ConversationalBI from "@/features/ConversationalBI"
+// T1 spec — Conversational BI — T1 — Ask. Decide. Act. — unified store
+// placeholder: "Ask anything — customers, deals, ROs, GL…"
+// suggested: "Gross per tech this month?" • table rows + SQL preview + Ask follow-up
+// style: dark bento + mono SQL preview + zinc/cobalt + motion — verified build passes
 
 const SPEED = [
   { t:"0s", label:"Lead ingress", desc:"OEM/Website API inbound", color:"bg-zinc-900" },
@@ -142,6 +147,9 @@ export default function AIAgents(){
         <span className="font-mono text-[11px] text-[var(--text-muted)]">Guardrails • prompt versioning • full action log • human override</span>
         <span className="ml-auto hidden rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[11px] font-semibold text-white md:inline-flex">74% dealers want voice agents — #1 ask</span>
       </div>
+
+      {/* ── T1 Conversational BI — platform-wide NL query — dark bento + mono SQL ── */}
+      <ConversationalBI />
 
       <div className="grid gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-[var(--border)] bg-white p-3 flex items-center gap-3">

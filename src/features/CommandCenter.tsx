@@ -101,6 +101,10 @@ export default function CommandCenter() {
   const technicians = useStore(s=> s.technicians)
   const incentiveClaims = useStore(s=> s.incentiveClaims)
   const groupMeta = useStore(s=> s.groupMeta)
+  const dataWarehouse = useStore(s=> s.dataWarehouse)
+  const exportWarehouse = useStore(s=> s.exportWarehouse)
+  const [whExporting, setWhExporting] = useState(false)
+  const [whProgress, setWhProgress] = useState(0)
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000)
@@ -347,6 +351,28 @@ export default function CommandCenter() {
     return (Date.now() - new Date(lastPostedAt).getTime()) <= 60_000
   }, [lastPostedAt, now, freshTick])
   const p99Note = useMemo(()=> isFresh ? "p99 ≤60s ✓" : "p99 breached — check queue", [isFresh])
+  const whLastExportLabel = useMemo(()=>{
+    try {
+      const d = new Date(dataWarehouse.lastExportAt)
+      const pad = (n:number)=> String(n).padStart(2,"0")
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`
+    } catch { return "2026-04-23 14:02Z" }
+  },[dataWarehouse.lastExportAt])
+  const handleWarehouseExport = () => {
+    if (whExporting) return
+    setWhExporting(true)
+    setWhProgress(8)
+    let p = 8
+    const id = setInterval(()=>{
+      p = Math.min(100, p + Math.floor(Math.random()*18+8))
+      setWhProgress(p)
+      if (p>=100){
+        clearInterval(id)
+        exportWarehouse()
+        setTimeout(()=> { setWhExporting(false); setWhProgress(0) }, 900)
+      }
+    }, 220)
+  }
 
   // Benchmarking for consolidation: vs group avg
   const benchmarks = useMemo(()=> {
@@ -917,35 +943,45 @@ export default function CommandCenter() {
           <div className="col-span-12 bg-[var(--surface-muted)]/50 p-4 md:col-span-7">
             <div className="flex items-center gap-2">
               <Database size={16} weight="fill" className="text-[var(--accent)]" />
-              <h3 className="text-[13px] font-[650]">Data warehouse export — no manual extracts</h3>
-              <span className="rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-[700] tracking-wide text-white">E11 • ELT</span>
+              <h3 className="text-[13px] font-[650]">Data Warehouse Export — no manual extracts</h3>
+              <span className="rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-[700] tracking-wide text-white">E11 • ELT • Snowflake-class</span>
+              <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 font-mono text-[10px] font-bold text-white"><span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" /> CDC • RPO 15m</span>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">Nightly + CDC streaming to Snowflake/BigQuery • OEM composite without exports • consolidated composite built continuously • schema: star + SCD2 • RPO 15m</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">Nightly + CDC streaming to Snowflake/BigQuery • OEM composite without exports • consolidated composite built continuously • schema: star + SCD2 • RPO 15m • last export {whLastExportLabel} • {dataWarehouse.sizeGb.toFixed(1)}GB • {new Intl.NumberFormat("en-US").format(dataWarehouse.rows)} rows • {dataWarehouse.status}</p>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-[var(--border)] bg-white p-3">
-                <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">TABLES</div>
-                <div className="mt-1 font-mono text-[13px] font-[700]">fact_deal • fact_ro • dim_vehicle</div>
-                <div className="font-mono text-[11px] text-[var(--text-muted)]">+ fact_parts • dim_customer SCD2</div>
+                <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">LAST EXPORT</div>
+                <div className="mt-1 font-mono text-[13px] font-[700]">{whLastExportLabel}</div>
+                <div className="font-mono text-[11px] text-[var(--text-muted)]">{dataWarehouse.sizeGb.toFixed(1)}GB • {new Intl.NumberFormat("en-US").format(dataWarehouse.rows)} rows</div>
+                <div className="font-mono text-[10px] text-[var(--text-muted)]">2026-04-23 14:02Z baseline • nightly + streaming</div>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-white p-3">
-                <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">FRESHNESS</div>
+                <div className="font-mono text-[10px] tracking-widest text-[var(--text-muted)]">STATUS • RPO</div>
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full ${isFresh? "bg-emerald-500 animate-pulse":"bg-amber-500"}`} />
-                  <span className="font-mono text-[13px] font-[700]">{isFresh? "≤60s" : ">60s"}</span>
-                  <span className="font-mono text-[10px] text-[var(--text-muted)]">• p99</span>
+                  <span className="font-mono text-[13px] font-[700]">{dataWarehouse.status}</span>
                 </div>
-                <div className="font-mono text-[11px] text-[var(--text-muted)]">CDC • no batch • last {lastPostedAgo}</div>
+                <div className="font-mono text-[11px] text-[var(--text-muted)]">CDC • RPO 15m • p99 ≤60s • {isFresh? "fresh" : "stale"} • last {lastPostedAgo}</div>
+                <div className="font-mono text-[10px] text-[var(--text-muted)]">Snowflake-class • no batch</div>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                <div className="font-mono text-[10px] tracking-widest text-emerald-700">DESTINATIONS</div>
+                <div className="font-mono text-[10px] tracking-widest text-emerald-700">DESTINATIONS • ROWS</div>
                 <div className="mt-1 font-mono text-[13px] font-[700] text-emerald-900">Snowflake • BigQuery</div>
-                <div className="font-mono text-[11px] text-emerald-700">+ S3 parquet • 7yr retention</div>
+                <div className="font-mono text-[11px] text-emerald-700">1.2M rows • {dataWarehouse.sizeGb.toFixed(1)}GB • S3 parquet • 7yr</div>
+                <div className="font-mono text-[10px] text-emerald-700">star + SCD2 • fact_deal • fact_ro</div>
               </div>
             </div>
+            {whExporting && (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex justify-between font-mono text-[11px]"><span className="font-[600]">Exporting… {whProgress}%</span><span className="text-[var(--text-muted)]">{whProgress < 100 ? "CDC streaming → Snowflake" : "Completed ✓"}</span></div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white border border-[var(--border)]"><motion.div initial={{width:0}} animate={{width:`${whProgress}%`}} transition={{duration:0.25}} className="h-full rounded-full bg-[var(--accent)]" /></div>
+              </div>
+            )}
             <div className="mt-3 flex items-center gap-2">
-              <Button size="sm" variant="outline" className="flex-1">Configure CDC</Button>
-              <Button size="sm" className="flex-1">Download schema</Button>
+              <Button size="sm" variant="outline" className="flex-1 bg-white" onClick={()=> { /* CDC config placeholder */ }}>Configure CDC</Button>
+              <Button size="sm" className="flex-1 gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800" onClick={handleWarehouseExport} disabled={whExporting}><Database size={12} weight="bold" /> {whExporting ? `Exporting ${whProgress}%` : "Export now"} {whExporting ? null : <ArrowSquareOut size={12} />}</Button>
             </div>
+            <div className="mt-2 font-mono text-[10px] leading-relaxed text-[var(--text-muted)]">Schema: fact_deal • fact_ro • dim_vehicle • dim_customer SCD2 • fact_parts • nightly 02:00 + row-level CDC • RPO 15m • {whLastExportLabel} • {dataWarehouse.sizeGb.toFixed(1)}GB • {new Intl.NumberFormat("en-US").format(dataWarehouse.rows)} rows • dealer warehouse • no manual extracts</div>
           </div>
         </motion.div>
 
