@@ -37,106 +37,97 @@ import {
   Phone,
   ChatCircle,
 } from "@phosphor-icons/react"
+import { useStore } from "@/lib/store"
 
 // ──────────────────────────────────────────────
-// Types & Dummy Data
+// Helpers & Mappings for store data
 // ──────────────────────────────────────────────
-type ROStatus = "write-up" | "mpi" | "waiting-approval" | "authorized" | "in-progress" | "ready"
+type ROStatusDisplay = string
 
-type Appointment = {
-  id: string
-  time: string
-  customer: string
-  vehicle: string
-  vin: string
-  opCode: string
-  opLabel: string
-  lane: "Express" | "Mainline" | "Diag"
-  advisor: string
-  status: "arrived" | "scheduled" | "in-bay" | "no-show"
-  wait: boolean
+const storeStatusMeta: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+  open: { label: "Open", color: "bg-zinc-700 text-zinc-200", icon: PenNib },
+  in_progress: { label: "In Progress", color: "bg-sky-500 text-white", icon: Wrench },
+  waiting_approval: { label: "Waiting approval", color: "bg-orange-500 text-white", icon: Hourglass },
+  waiting_parts: { label: "Waiting parts", color: "bg-amber-500 text-black", icon: Package },
+  completed: { label: "Completed", color: "bg-emerald-500 text-white", icon: CheckCircle },
+  invoiced: { label: "Ready", color: "bg-violet-500 text-white", icon: Flag },
+  cancelled: { label: "Cancelled", color: "bg-red-500 text-white", icon: X },
+  // legacy fallbacks (in case data still has old values)
+  "write-up": { label: "Write-up", color: "bg-zinc-700 text-zinc-200", icon: PenNib },
+  mpi: { label: "MPI", color: "bg-amber-500 text-black", icon: Eye },
+  "waiting-approval": { label: "Waiting approval", color: "bg-orange-500 text-white", icon: Hourglass },
+  authorized: { label: "Authorized", color: "bg-emerald-500 text-white", icon: CheckCircle },
+  "in-progress": { label: "In Progress", color: "bg-sky-500 text-white", icon: Wrench },
+  ready: { label: "Ready", color: "bg-violet-500 text-white", icon: Flag },
 }
 
-type RO = {
-  id: string
-  ro: string
-  customer: string
-  vehicle: string
-  tag: string
-  advisor: string
-  tech: string | null
-  status: ROStatus
-  promise: string
-  concern: string
-  flagged: number
-  mpiDone: number
-  mpiTotal: number
-  tagColor: string
+const apptStatusMeta: Record<string, { label: string; color: string }> = {
+  scheduled: { label: "scheduled", color: "bg-white/10 text-zinc-300" },
+  checked_in: { label: "arrived", color: "bg-emerald-500 text-black" },
+  in_progress: { label: "in-bay", color: "bg-sky-500 text-white" },
+  waiting_parts: { label: "waiting", color: "bg-amber-500 text-black" },
+  completed: { label: "completed", color: "bg-zinc-700 text-zinc-200" },
+  no_show: { label: "no-show", color: "bg-red-500/20 text-red-300 border border-red-500/30" },
+  cancelled: { label: "cancelled", color: "bg-red-500 text-white" },
 }
 
-type Tech = {
-  id: string
-  name: string
-  initials: string
-  skill: string[]
-  flagged: number
-  capacity: number
-  status: "available" | "busy" | "break"
-  jobs: { ro: string; op: string; hrs: number; status: ROStatus }[]
+function laneForAppt(a: { rooftopId: string }): "Express" | "Mainline" | "Diag" {
+  if (a.rooftopId === "dtown") return "Express"
+  if (a.rooftopId === "north") return "Mainline"
+  return "Diag"
 }
 
-type MpiItem = {
-  id: string
-  category: "Brakes" | "Tires" | "Fluids" | "Suspension" | "Battery" | "Filters"
-  item: string
-  rec: string
-  severity: "green" | "yellow" | "red"
-  decision: "pending" | "approved" | "declined" | "deferred"
-  listPrice: number
-  matrixPrice: number
-  cost: number
-  laborHrs: number
-  photos: number
-  hasVideo: boolean
-  techNote: string
+function laneColor(lane: "Express" | "Mainline" | "Diag") {
+  if (lane === "Express") return "bg-emerald-500"
+  if (lane === "Mainline") return "bg-sky-500"
+  return "bg-violet-500"
 }
 
-const APPOINTMENTS: Appointment[] = [
-  { id: "A1", time: "7:30", customer: "Jenna Walsh", vehicle: "2022 RAV4 XLE", vin: "2T3B1RFV…4K128", opCode: "LOF + ROT", opLabel: "Oil & Rotate", lane: "Express", advisor: "D. Kim", status: "arrived", wait: true },
-  { id: "A2", time: "8:00", customer: "Marcus Henry", vehicle: "2020 Tundra 1794", vin: "5DFGT8E1…9P442", opCode: "BRK INS", opLabel: "Brake Inspect", lane: "Mainline", advisor: "S. Patel", status: "arrived", wait: false },
-  { id: "A3", time: "8:00", customer: "Alyssa Cho", vehicle: "2024 Camry SE", vin: "4T1G11AK…2U771", opCode: "MPI-COM", opLabel: "30K Service + MPI", lane: "Mainline", advisor: "D. Kim", status: "in-bay", wait: false },
-  { id: "A4", time: "8:30", customer: "Robert Pierce", vehicle: "2018 Highlander Ltd", vin: "5TDDZRFH…8S903", opCode: "DIAG-CE", opLabel: "CEL / Diag", lane: "Diag", advisor: "J. Torres", status: "scheduled", wait: false },
-  { id: "A5", time: "9:00", customer: "Keisha Grant", vehicle: "2021 4Runner TRD", vin: "JTEBU5JR…3M221", opCode: "TIRE-4", opLabel: "4 Tires + Align", lane: "Express", advisor: "S. Patel", status: "scheduled", wait: true },
-  { id: "A6", time: "9:30", customer: "Waitlist • Open", vehicle: "—", vin: "—", opCode: "ANY", opLabel: "Flex slot • AI hold", lane: "Express", advisor: "—", status: "scheduled", wait: true },
-  { id: "A7", time: "10:00", customer: "David Park", vehicle: "2023 Tacoma SR5", vin: "3TMCZ5AN…1P889", opCode: "RECALL", opLabel: "Recall + LOF", lane: "Mainline", advisor: "D. Kim", status: "scheduled", wait: false },
-  { id: "A8", time: "10:30", customer: "Nadia Stone", vehicle: "2019 Avalon XLE", vin: "4T1BZ11D…6U334", opCode: "AC DIAG", opLabel: "A/C Diag", lane: "Diag", advisor: "J. Torres", status: "scheduled", wait: false },
-]
+function fmtTime(iso: string) {
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    // show like 7:30 without AM/PM to match original 7:30 style
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false })
+  } catch {
+    return iso
+  }
+}
 
-const ROS: RO[] = [
-  { id: "1", ro: "RO 88341", customer: "Jenna Walsh", vehicle: "2022 RAV4 XLE • 32,410 mi", tag: "WAITER", advisor: "D. Kim", tech: "M. Reyes", status: "mpi", promise: "11:30 AM", concern: "Loud squeal braking + 30K", flagged: 1.2, mpiDone: 4, mpiTotal: 7, tagColor: "emerald" },
-  { id: "2", ro: "RO 88342", customer: "Marcus Henry", vehicle: "2020 Tundra 1794 • 58,210 mi", tag: "LOANER", advisor: "S. Patel", tech: "J. Boone", status: "waiting-approval", promise: "3:00 PM", concern: "Brake pulsation, rotate", flagged: 2.4, mpiDone: 7, mpiTotal: 7, tagColor: "amber" },
-  { id: "3", ro: "RO 88344", customer: "Alyssa Cho", vehicle: "2024 Camry SE • 28,900 mi", tag: "", advisor: "D. Kim", tech: "M. Reyes", status: "in-progress", promise: "4:00 PM", concern: "30K full service", flagged: 3.0, mpiDone: 7, mpiTotal: 7, tagColor: "zinc" },
-  { id: "4", ro: "RO 88338", customer: "Keisha Grant", vehicle: "2021 4Runner TRD • 41,100 mi", tag: "WAITER", advisor: "S. Patel", tech: null, status: "write-up", promise: "12:00 PM", concern: "4 tires + alignment", flagged: 0, mpiDone: 0, mpiTotal: 7, tagColor: "emerald" },
-  { id: "5", ro: "RO 88331", customer: "Robert Pierce", vehicle: "2018 Highlander Ltd • 72,400 mi", tag: "CUST PAY", advisor: "J. Torres", tech: "A. Silva", status: "ready", promise: "11:00 AM", concern: "CEL + trans shudder", flagged: 4.1, mpiDone: 7, mpiTotal: 7, tagColor: "sky" },
-  { id: "6", ro: "RO 88345", customer: "David Park", vehicle: "2023 Tacoma SR5 • 19,200 mi", tag: "RECALL", advisor: "D. Kim", tech: "J. Boone", status: "authorized", promise: "2:00 PM", concern: "Recall + courtesy wash", flagged: 0.8, mpiDone: 7, mpiTotal: 7, tagColor: "violet" },
-]
+function vehicleLabel(v: { year: number; make: string; model: string; vin: string; mileage: number }) {
+  return `${v.year} ${v.make} ${v.model}`
+}
 
-const TECHS: Tech[] = [
-  { id: "T1", name: "Marco Reyes", initials: "MR", skill: ["Toyota Cert", "Brakes", "Diag"], flagged: 6.8, capacity: 8, status: "busy", jobs: [{ ro: "88341", op: "30K + BRK", hrs: 2.4, status: "mpi" }, { ro: "88344", op: "30K Service", hrs: 3.0, status: "in-progress" }] },
-  { id: "T2", name: "Jenna Boone", initials: "JB", skill: ["Master", "Engine", "Hybrid"], flagged: 7.2, capacity: 8, status: "busy", jobs: [{ ro: "88342", op: "BRK INS", hrs: 1.8, status: "waiting-approval" }, { ro: "88345", op: "RECALL", hrs: 0.8, status: "authorized" }] },
-  { id: "T3", name: "Alex Silva", initials: "AS", skill: ["Diag", "Trans", "Electrical"], flagged: 3.1, capacity: 8, status: "available", jobs: [{ ro: "88331", op: "DIAG-CE", hrs: 2.5, status: "ready" }] },
-  { id: "T4", name: "Unassigned", initials: "—", skill: [], flagged: 0, capacity: 8, status: "available", jobs: [] },
-]
+function getDecision(item: unknown) {
+  const anyItem = item as Record<string, unknown>
+  if (anyItem.approved === true) return "approved"
+  if (anyItem.approved === false) return "declined"
+  if ((item as { declined?: boolean }).declined === true) return "declined"
+  const s = (item as { status?: string }).status
+  if (s === "approved") return "approved"
+  if (s === "declined") return "declined"
+  if (s === "deferred") return "deferred"
+  return "pending"
+}
 
-const INITIAL_MPI: MpiItem[] = [
-  { id: "m1", category: "Brakes", item: "Front pads & rotors", rec: "Pads at 2mm, scoring on rotor — unsafe", severity: "red", decision: "pending", listPrice: 485, matrixPrice: 629, cost: 198, laborHrs: 1.8, photos: 3, hasVideo: true, techNote: "Video: audible squeal on road test + caliper measurement" },
-  { id: "m2", category: "Tires", item: "Front tires", rec: "4/32″ • uneven inner wear — alignment recommended", severity: "yellow", decision: "pending", listPrice: 398, matrixPrice: 512, cost: 176, laborHrs: 0.6, photos: 2, hasVideo: true, techNote: "Photo: wear bars visible, inner edge feathered" },
-  { id: "m3", category: "Fluids", item: "Brake fluid exchange", rec: "Moisture 3.2% — due per Toyota schedule", severity: "yellow", decision: "deferred", listPrice: 129, matrixPrice: 159, cost: 28, laborHrs: 0.5, photos: 1, hasVideo: false, techNote: "Test strip + color comparison" },
-  { id: "m4", category: "Filters", item: "Cabin air filter", rec: "Clogged — debris, reduced airflow", severity: "yellow", decision: "pending", listPrice: 59, matrixPrice: 79, cost: 14, laborHrs: 0.2, photos: 2, hasVideo: false, techNote: "Photo before/after bay" },
-  { id: "m5", category: "Battery", item: "Battery & charging system", rec: "CCA 412/650 — marginal, slow crank noted", severity: "yellow", decision: "pending", listPrice: 289, matrixPrice: 345, cost: 168, laborHrs: 0.3, photos: 1, hasVideo: true, techNote: "Video: load test + terminal corrosion" },
-  { id: "m6", category: "Suspension", item: "Rear shocks", rec: "Seepage, bounce test fail", severity: "red", decision: "pending", listPrice: 620, matrixPrice: 799, cost: 312, laborHrs: 1.4, photos: 3, hasVideo: true, techNote: "Video: shock oil leak, rebound comparison" },
-  { id: "m7", category: "Fluids", item: "Coolant condition", rec: "pH OK, level OK — no action", severity: "green", decision: "approved", listPrice: 0, matrixPrice: 0, cost: 0, laborHrs: 0, photos: 1, hasVideo: false, techNote: "Green — pass" },
-]
+function getPricing(item: { retailAmount?: number; laborHours?: number }) {
+  const retail = item.retailAmount ?? 0
+  if (retail === 0) return null
+  const list = Math.round(retail * 0.78)
+  const matrix = retail
+  const cost = Math.round(retail * 0.45)
+  const laborHrs = item.laborHours ?? 0
+  const margin = Math.round(((matrix - cost) / matrix) * 100)
+  const uplift = list > 0 ? Math.round(((matrix - list) / list) * 100) : 0
+  return { list, matrix, cost, laborHrs, margin, uplift }
+}
+
+function initialsFromName(name: string) {
+  const parts = name.split(" ").filter(Boolean)
+  if (parts.length === 0) return "—"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
 
 const DEFERRED = [
   { item: "Brake fluid exchange", ro: "88332 • 04/12", age: "14d ago", price: 159, next: "Next visit" },
@@ -144,58 +135,111 @@ const DEFERRED = [
   { item: "Rear shocks", ro: "88341 • today", age: "Pending", price: 799, next: "Awaiting auth" },
 ]
 
-// ──────────────────────────────────────────────
-// helpers
-// ──────────────────────────────────────────────
-const statusMeta: Record<ROStatus, { label: string; color: string; icon: React.ElementType }> = {
-  "write-up": { label: "Write-up", color: "bg-zinc-700 text-zinc-200", icon: PenNib },
-  "mpi": { label: "MPI", color: "bg-amber-500 text-black", icon: Eye },
-  "waiting-approval": { label: "Waiting approval", color: "bg-orange-500 text-white", icon: Hourglass },
-  "authorized": { label: "Authorized", color: "bg-emerald-500 text-white", icon: CheckCircle },
-  "in-progress": { label: "In Progress", color: "bg-sky-500 text-white", icon: Wrench },
-  "ready": { label: "Ready", color: "bg-violet-500 text-white", icon: Flag },
-}
-
-function laneColor(lane: Appointment["lane"]) {
-  if (lane === "Express") return "bg-emerald-500"
-  if (lane === "Mainline") return "bg-sky-500"
-  return "bg-violet-500"
-}
+const statusCycle = ["open", "in_progress", "waiting_approval", "completed"]
 
 // ──────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────
 export default function ServiceLane() {
-  const [selectedRoId, setSelectedRoId] = useState<string>("2")
-  const [mpi, setMpi] = useState<MpiItem[]>(INITIAL_MPI)
-  const [filter, setFilter] = useState<ROStatus | "all">("all")
+  // Zustand store — single source of truth per tasks 1-5
+  const appointments = useStore((s) => s.serviceAppointments)
+  const ros = useStore((s) => s.repairOrders)
+  const techs = useStore((s) => s.technicians)
+  const createROFromAppointment = useStore((s) => s.createROFromAppointment)
+  const updateROStatus = useStore((s) => s.updateROStatus)
+  const approveMpiItem = useStore((s) => s.approveMpiItem)
+  const addFlagHours = useStore((s) => s.addFlagHours)
+
+  const [selectedRoId, setSelectedRoId] = useState<string>(ros[0]?.id ?? "RO-1001")
+  const [filter, setFilter] = useState<string>("all")
   const [aiAccepted, setAiAccepted] = useState(false)
   const [showPayLink, setShowPayLink] = useState(false)
   const [sentLink, setSentLink] = useState(false)
   const [search, setSearch] = useState("")
 
-  const selectedRO = ROS.find((r) => r.id === selectedRoId) ?? ROS[1]
+  // keep selected RO valid when store changes (e.g., after Create RO)
+  const selectedRO = useMemo(() => ros.find((r) => r.id === selectedRoId) ?? ros[0] ?? null, [ros, selectedRoId])
 
   const filteredRos = useMemo(() => {
-    let out = ROS
-    if (filter !== "all") out = out.filter((r) => r.status === filter)
-    if (search) out = out.filter((r) => (r.customer + r.vehicle + r.ro).toLowerCase().includes(search.toLowerCase()))
+    let out: typeof ros = [...ros] as typeof ros
+    if (filter !== "all") {
+      // map legacy filter names to store status values
+      const filterMap: Record<string, string> = {
+        "write-up": "open",
+        mpi: "in_progress",
+        "waiting-approval": "waiting_approval",
+        "waiting_approval": "waiting_approval",
+        "in-progress": "in_progress",
+        in_progress: "in_progress",
+        ready: "completed",
+        authorized: "in_progress",
+        open: "open",
+        completed: "completed",
+        waiting_parts: "waiting_parts",
+        invoiced: "invoiced",
+      }
+      const target = filterMap[filter] ?? filter.replace(/-/g, "_")
+      out = out.filter((r) => r.status === target)
+    }
+    if (search) {
+      const q = search.toLowerCase()
+      out = out.filter((r) => (r.customerName + vehicleLabel(r.vehicle) + r.roNumber + r.concern).toLowerCase().includes(q))
+    }
     return out
-  }, [filter, search])
+  }, [ros, filter, search])
 
   const mpiStats = useMemo(() => {
-    const approved = mpi.filter((m) => m.decision === "approved").reduce((s, m) => s + m.matrixPrice, 0)
-    const pending = mpi.filter((m) => m.decision === "pending").length
-    const declined = mpi.filter((m) => m.decision === "declined").length
-    const deferred = mpi.filter((m) => m.decision === "deferred").length
-    const potential = mpi.reduce((s, m) => s + m.matrixPrice, 0)
-    return { approved, pending, declined, deferred, potential }
-  }, [mpi])
+    if (!selectedRO || !selectedRO.mpiItems) return { approved: 0, pending: 0, declined: 0, deferred: 0, potential: 0, approvedCount: 0 }
+    const items = selectedRO.mpiItems
+    let approved = 0
+    let pending = 0
+    let declined = 0
+    let deferred = 0
+    let potential = 0
+    let approvedCount = 0
+    items.forEach((m) => {
+      const dec = getDecision(m)
+      const price = m.retailAmount ?? 0
+      potential += price
+      if (dec === "approved") {
+        approved += price
+        approvedCount++
+      } else if (dec === "declined") declined++
+      else if (dec === "deferred") deferred++
+      else pending++
+    })
+    return { approved, pending, declined, deferred, potential, approvedCount }
+  }, [selectedRO])
 
-  const toggleMpi = (id: string, decision: MpiItem["decision"]) =>
-    setMpi((prev) => prev.map((m) => (m.id === id ? { ...m, decision } : m)))
+  const totalFlagged = useMemo(() => techs.reduce((s, t) => s + t.hoursFlaggedMTD, 0), [techs])
+  const totalClocked = useMemo(() => techs.reduce((s, t) => s + t.hoursClockedMTD, 0), [techs])
+  const avgEfficiency = totalClocked ? Math.round((totalFlagged / totalClocked) * 100) : 0
+  const totalCapacityHrs = useMemo(() => techs.reduce((s, t) => s + t.maxBays * 8, 0) || 64, [techs])
 
-  const capacityPct = 18 / 24
+  const handleStatusClick = (roId: string, current: string) => {
+    const normalized = current.replace(/-/g, "_")
+    let idx = statusCycle.indexOf(normalized)
+    // if current not in cycle (e.g., waiting_parts, invoiced), start at 0
+    if (idx === -1) idx = -1
+    const next = statusCycle[(idx + 1) % statusCycle.length] as string
+    updateROStatus(roId, next)
+    if (next === "completed") {
+      const ro = ros.find((r) => r.id === roId)
+      const techId = (ro?.technicianId as string | undefined) ?? techs[0]?.id
+      if (techId) addFlagHours(techId, 2.5)
+    }
+  }
+
+  const handleCreateRO = (appointmentId: string) => {
+    const newId = createROFromAppointment(appointmentId)
+    if (newId) setSelectedRoId(newId)
+  }
+
+  const handleMpiDecision = (roId: string, index: number, approve: boolean) => {
+    approveMpiItem(roId, index, approve)
+  }
+
+  const capacityPct = Math.min(1, totalFlagged / totalCapacityHrs)
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-violet-500/30 selection:text-white">
@@ -224,11 +268,11 @@ export default function ServiceLane() {
           <div className="flex items-center gap-2">
             <div className="hidden xl:flex items-center gap-2 rounded-full bg-white/[0.06] border border-white/[0.06] px-3 py-1.5">
               <Gauge className="h-4 w-4 text-zinc-400" />
-              <span className="text-xs font-semibold">Bays 18/24</span>
+              <span className="text-xs font-semibold">Bays {Math.round(totalFlagged)}/{totalCapacityHrs}</span>
               <div className="h-1.5 w-24 rounded-full bg-white/10 overflow-hidden">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${capacityPct * 100}%` }} transition={{ duration: 1, ease: "easeOut" }} className="h-full bg-emerald-500" />
               </div>
-              <span className="text-[11px] text-zinc-400">75% utilized</span>
+              <span className="text-[11px] text-zinc-400">{Math.round(capacityPct * 100)}% utilized</span>
             </div>
             <button className="relative grid h-9 w-9 place-items-center rounded-full bg-white text-black">
               <Bell className="h-4 w-4" weight="bold" />
@@ -249,10 +293,10 @@ export default function ServiceLane() {
       <div className="max-w-[1440px] mx-auto px-6 py-4">
         <div className="grid grid-cols-12 gap-3">
           {[
-            { label: "Appts Today", value: "24", sub: "18 arrived • 2 no-show", icon: CalendarDots, accent: "text-emerald-400" },
-            { label: "ROs Open", value: "18", sub: "6 waiting approval • 4 ready", icon: Wrench, accent: "text-sky-400" },
-            { label: "Flagged Hrs", value: "41.2h", sub: "Target 56h • 73% pace", icon: Timer, accent: "text-amber-400" },
-            { label: "MPI Close Rate", value: "68%", sub: "+4.2% vs last Tue", icon: TrendUp, accent: "text-violet-400" },
+            { label: "Appts Today", value: String(appointments.length), sub: `${appointments.filter(a=>a.status==="checked_in").length} arrived • ${appointments.filter(a=>a.status==="no_show").length} no-show`, icon: CalendarDots, accent: "text-emerald-400" },
+            { label: "ROs Open", value: String(ros.filter(r=> r.status !== "completed" && r.status !== "invoiced" && r.status !== "cancelled").length), sub: `${ros.filter(r=> r.status==="waiting_approval").length} waiting approval • ${ros.filter(r=> r.status==="completed" || r.status==="invoiced").length} ready`, icon: Wrench, accent: "text-sky-400" },
+            { label: "Flagged Hrs", value: `${totalFlagged.toFixed(1)}h`, sub: `Target ${totalCapacityHrs}h • ${avgEfficiency}% eff • live`, icon: Timer, accent: "text-amber-400" },
+            { label: "MPI Close Rate", value: selectedRO ? `${selectedRO.mpiItems.length ? Math.round((mpiStats.approvedCount / selectedRO.mpiItems.length)*100) : 68}%` : "68%", sub: `${mpiStats.approvedCount} approved • live from RO`, icon: TrendUp, accent: "text-violet-400" },
           ].map((k) => (
             <div key={k.label} className="col-span-6 lg:col-span-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur p-4 flex items-center justify-between">
               <div>
@@ -290,43 +334,69 @@ export default function ServiceLane() {
                   <span className="opacity-20">•</span>
                   <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-violet-500" />Diag 1/2</span>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-emerald-500 text-black text-[11px] font-black px-2.5 py-1">OPEN 6 SLOTS</span>
+                <span className="inline-flex items-center rounded-full bg-emerald-500 text-black text-[11px] font-black px-2.5 py-1">OPEN {Math.max(0, 6 - appointments.filter(a=> a.status!=="cancelled" && a.status!=="no_show").length)} SLOTS</span>
               </div>
             </div>
 
             <div className="grid grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-white/[0.06] bg-white/[0.02]">
-              {(["Express", "Mainline", "Diag"] as const).map((lane) => (
+              {(["Express", "Mainline", "Diag"] as const).map((lane) => {
+                const laneAppts = appointments.filter((a) => laneForAppt(a) === lane)
+                return (
                 <div key={lane} className="col-span-12 lg:col-span-4">
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${laneColor(lane)}`} />
                       <span className="text-xs font-black tracking-widest uppercase">{lane}</span>
-                      <span className="text-[11px] text-zinc-500 font-mono">{APPOINTMENTS.filter((a) => a.lane === lane && a.customer.includes("Waitlist") === false).length} booked</span>
+                      <span className="text-[11px] text-zinc-500 font-mono">{laneAppts.length} booked</span>
                     </div>
                     <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-white/10 border border-white/10">{lane === "Express" ? "45m" : lane === "Mainline" ? "90m" : "120m"} avg</span>
                   </div>
                   <div className="px-3 pb-3 space-y-2">
-                    {APPOINTMENTS.filter((a) => a.lane === lane).map((a) => (
-                      <div key={a.id} className={`group relative rounded-xl border px-3 py-2.5 flex gap-3 items-center transition ${a.customer.includes("Waitlist") ? "border-dashed border-white/15 bg-white/[0.02]" : "bg-zinc-900 border-white/[0.06] hover:border-white/15 hover:bg-zinc-800"}`}>
+                    {laneAppts.map((a) => {
+                      const meta = apptStatusMeta[a.status] ?? apptStatusMeta.scheduled
+                      const hasRO = Boolean(a.roId)
+                      return (
+                      <div key={a.id} className={`group relative rounded-xl border px-3 py-2.5 flex gap-3 items-center transition ${a.customerName.includes("Waitlist") ? "border-dashed border-white/15 bg-white/[0.02]" : "bg-zinc-900 border-white/[0.06] hover:border-white/15 hover:bg-zinc-800"}`}>
                         <div className="text-center min-w-[56px]">
-                          <div className="text-xs font-black font-mono">{a.time}</div>
-                          <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1 inline-flex ${a.status === "arrived" ? "bg-emerald-500 text-black" : a.status === "in-bay" ? "bg-sky-500 text-white" : "bg-white/10 text-zinc-300"}`}>{a.status}</div>
+                          <div className="text-xs font-black font-mono">{fmtTime(a.scheduledAt)}</div>
+                          <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1 inline-flex border ${meta.color}`}>{meta.label}</div>
                         </div>
                         <div className="h-10 w-px bg-white/10" />
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold leading-none truncate">{a.customer} {a.wait && <span className="ml-1 inline-flex text-[9px] font-black tracking-widest bg-amber-500 text-black px-1 rounded">WAITER</span>}</div>
-                          <div className="text-[11px] text-zinc-400 truncate">{a.vehicle !== "—" ? a.vehicle : "AI will fill • LOF • any advisor"}</div>
+                          <div className="text-xs font-bold leading-none truncate">{a.customerName} {a.transport === "waiter" && <span className="ml-1 inline-flex text-[9px] font-black tracking-widest bg-amber-500 text-black px-1 rounded">WAITER</span>}</div>
+                          <div className="text-[11px] text-zinc-400 truncate">{vehicleLabel(a.vehicle)} • {a.vehicle.mileage.toLocaleString()} mi</div>
                           <div className="flex items-center gap-1 mt-1">
-                            <span className="text-[10px] font-mono font-bold bg-white text-black px-1.5 py-0.5 rounded">{a.opCode}</span>
-                            <span className="text-[11px] text-zinc-400 truncate">{a.opLabel}</span>
+                            <span className="text-[10px] font-mono font-bold bg-white text-black px-1.5 py-0.5 rounded">{a.servicesRequested[0] ?? a.concern.slice(0,18)}</span>
+                            <span className="text-[11px] text-zinc-400 truncate hidden xl:inline">{a.concern.slice(0,22)}</span>
                             <span className="ml-auto text-[11px] text-zinc-500">{a.advisor}</span>
                           </div>
+                          {!hasRO && a.status !== "no_show" && a.status !== "cancelled" && (
+                            <button
+                              onClick={() => handleCreateRO(a.id)}
+                              className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-white text-black text-[11px] font-bold px-2.5 py-1 hover:bg-zinc-100 transition"
+                            >
+                              <Wrench className="h-3 w-3" weight="bold" /> Create RO
+                            </button>
+                          )}
+                          {hasRO && (
+                            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-500 text-black text-[11px] font-bold px-2.5 py-1">
+                              <CheckCircle className="h-3 w-3" weight="bold" /> {a.roId}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
+                    {laneAppts.length === 0 && (
+                      <div className="rounded-xl border-2 border-dashed border-white/10 p-4 text-center">
+                        <div className="text-xs font-semibold text-zinc-400">No appts</div>
+                        <div className="text-[11px] text-zinc-500">AI will fill</div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="px-5 py-3 bg-amber-500/10 border-t border-amber-500/20 flex items-center gap-3">
@@ -353,8 +423,8 @@ export default function ServiceLane() {
               <div className="flex gap-3">
                 <div className="h-7 w-7 rounded-full bg-emerald-500 text-black grid place-items-center shrink-0 mt-0.5"><Lightning className="h-3.5 w-3.5" weight="fill" /></div>
                 <div>
-                  <div className="text-xs font-bold">Move Keisha Grant (9:00 TIRE-4) → Bay 7</div>
-                  <div className="text-xs text-zinc-400 leading-relaxed">Tech Boone free at 9:15 • keeps waiter promise &lt; 90m. Alternative: push to 1pm loaner.</div>
+                  <div className="text-xs font-bold">Move Grace Kim (8:30 LOF) → Bay 3</div>
+                  <div className="text-xs text-zinc-400 leading-relaxed">Tech Ortiz free at 9:15 • keeps waiter promise &lt; 90m. Alternative: push to 1pm loaner.</div>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -405,13 +475,13 @@ export default function ServiceLane() {
               </div>
 
               <div className="mt-3 flex gap-1.5 flex-wrap">
-                {(["all", "write-up", "mpi", "waiting-approval", "in-progress", "ready"] as const).map((s) => (
+                {(["all", "open", "in_progress", "waiting_approval", "waiting_parts", "completed"] as const).map((s) => (
                   <button
                     key={s}
-                    onClick={() => setFilter(s as any)}
+                    onClick={() => setFilter(s as string)}
                     className={`rounded-full px-2.5 py-1 text-xs font-bold capitalize border transition ${filter === s ? "bg-white text-black border-white" : "bg-white/[0.06] text-zinc-300 border-white/10 hover:bg-white/10"}`}
                   >
-                    {s === "waiting-approval" ? "waiting approval" : s}
+                    {s.replace(/_/g, " ")}
                   </button>
                 ))}
               </div>
@@ -424,8 +494,11 @@ export default function ServiceLane() {
 
             <div className="divide-y divide-white/[0.06] max-h-[560px] overflow-auto">
               {filteredRos.map((r) => {
-                const meta = statusMeta[r.status]
-                const isSel = r.id === selectedRoId
+                const meta = storeStatusMeta[r.status] ?? storeStatusMeta.open
+                const isSel = r.id === selectedRO?.id
+                const mpiDone = r.mpiItems.filter((m) => getDecision(m) !== "pending").length
+                const mpiTotal = r.mpiItems.length
+                const flagged = r.dispatch?.flaggedHours ?? 0
                 return (
                   <button
                     key={r.id}
@@ -434,19 +507,27 @@ export default function ServiceLane() {
                   >
                     {isSel && <span className="absolute left-0 top-0 bottom-0 w-1 bg-violet-500" />}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black tracking-widest">{r.ro}</span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.color}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black tracking-widest">{r.roNumber}</span>
+                        {/* Status pill wires to updateROStatus — cycles open → in_progress → waiting_approval → completed */}
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStatusClick(r.id, r.status)
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold cursor-pointer hover:brightness-110 transition ${meta.color}`}
+                          title="Click to advance status: open → in_progress → waiting_approval → completed"
+                        >
                           <meta.icon className="h-3 w-3" weight="bold" /> {meta.label}
                         </span>
-                        {r.tag && <span className={`text-[10px] font-black tracking-widest px-1.5 py-0.5 rounded ${r.tagColor === "emerald" ? "bg-emerald-500 text-black" : r.tagColor === "amber" ? "bg-amber-500 text-black" : r.tagColor === "sky" ? "bg-sky-500 text-white" : "bg-violet-500 text-white"}`}>{r.tag}</span>}
+                        {r.type !== "customer_pay" && <span className={`text-[10px] font-black tracking-widest px-1.5 py-0.5 rounded ${r.type === "warranty" ? "bg-amber-500 text-black" : r.type === "recall" ? "bg-violet-500 text-white" : "bg-sky-500 text-white"}`}>{r.type.toUpperCase()}</span>}
                       </div>
-                      <div className="text-sm font-semibold mt-1">{r.customer} <span className="text-zinc-500 font-normal">• {r.vehicle}</span></div>
-                      <div className="text-xs text-zinc-400 mt-1 line-clamp-1">{r.concern} • Adv: {r.advisor} {r.tech ? `• Tech: ${r.tech}` : "• Unassigned"}</div>
+                      <div className="text-sm font-semibold mt-1">{r.customerName} <span className="text-zinc-500 font-normal">• {vehicleLabel(r.vehicle)} • {r.vehicle.mileage.toLocaleString()} mi</span></div>
+                      <div className="text-xs text-zinc-400 mt-1 line-clamp-1">{r.concern} • Adv: {r.advisor} {r.technicianName ? `• Tech: ${r.technicianName}` : "• Unassigned"}</div>
                       <div className="mt-2 flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-white/10 border border-white/10 px-1.5 py-0.5 rounded"><Clock className="h-3 w-3" /> Promise {r.promise}</span>
-                        <span className="text-[11px] text-zinc-500">{r.flagged}h flagged</span>
-                        <span className="ml-auto text-[11px] font-medium flex items-center gap-1"><span className="h-1.5 w-8 rounded-full bg-white/10 overflow-hidden inline-block"><span className="block h-full bg-emerald-500" style={{ width: `${(r.mpiDone / r.mpiTotal) * 100}%` }} /></span> MPI {r.mpiDone}/{r.mpiTotal}</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-white/10 border border-white/10 px-1.5 py-0.5 rounded"><Clock className="h-3 w-3" /> Promise {r.promisedAt ? fmtTime(r.promisedAt) : "—"}</span>
+                        <span className="text-[11px] text-zinc-500">{flagged}h flagged</span>
+                        <span className="ml-auto text-[11px] font-medium flex items-center gap-1"><span className="h-1.5 w-8 rounded-full bg-white/10 overflow-hidden inline-block"><span className="block h-full bg-emerald-500" style={{ width: `${mpiTotal ? (mpiDone / mpiTotal) * 100 : 0}%` }} /></span> MPI {mpiDone}/{mpiTotal}</span>
                       </div>
                     </div>
                     <CaretRight className={`h-4 w-4 shrink-0 self-center transition ${isSel ? "text-violet-400" : "text-zinc-600 group-hover:text-zinc-400"}`} />
@@ -455,8 +536,8 @@ export default function ServiceLane() {
               })}
             </div>
             <div className="mt-auto px-4 py-3 bg-white/[0.03] border-t border-white/[0.06] flex items-center justify-between text-xs">
-              <span className="text-zinc-400 font-medium">Pipeline: write-up → MPI → approval → ready</span>
-              <span className="font-mono text-zinc-300">{filteredRos.filter((r) => r.status === "waiting-approval").length} awaiting SMS</span>
+              <span className="text-zinc-400 font-medium">Pipeline: open → in_progress → waiting_approval → completed</span>
+              <span className="font-mono text-zinc-300">{ros.filter((r) => r.status === "waiting_approval").length} awaiting SMS</span>
             </div>
           </motion.div>
 
@@ -471,39 +552,45 @@ export default function ServiceLane() {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white text-black font-bold px-2.5 py-1"><Timer className="h-3.5 w-3.5" /> 41.2 / 64h dispatched</span>
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white text-black font-bold px-2.5 py-1"><Timer className="h-3.5 w-3.5" /> {totalFlagged.toFixed(1)} / {totalCapacityHrs}h dispatched • {avgEfficiency}% eff</span>
                 <button className="h-8 w-8 grid place-items-center rounded-full bg-white/10 border border-white/10"><DotsThree className="h-4 w-4" weight="bold" /></button>
               </div>
             </div>
 
             <div className="grid grid-cols-12 divide-x divide-white/[0.06] min-h-[520px]">
-              {TECHS.map((t) => (
-                <div key={t.id} className={`col-span-6 lg:col-span-3 flex flex-col ${t.id === "T4" ? "bg-white/[0.02] border-dashed" : ""}`}>
+              {techs.map((t) => {
+                const techROs = ros.filter((r) => r.technicianId === t.id)
+                const eff = t.hoursClockedMTD ? Math.round((t.hoursFlaggedMTD / t.hoursClockedMTD) * 100) : 0
+                const barPct = t.hoursClockedMTD ? Math.min(100, (t.hoursFlaggedMTD / t.hoursClockedMTD) * 100) : (t.hoursFlaggedMTD / 8) * 100
+                const isAvailable = techROs.length < t.maxBays
+                return (
+                <div key={t.id} className={`col-span-6 lg:col-span-3 flex flex-col ${techROs.length===0 ? "bg-white/[0.02]" : ""}`}>
                   <div className="px-3 py-3 border-b border-white/[0.06] bg-white/[0.03]">
                     <div className="flex items-center gap-2">
-                      <div className={`h-8 w-8 rounded-full grid place-items-center text-xs font-black border ${t.status === "busy" ? "bg-amber-500 text-black border-amber-500" : t.status === "available" ? "bg-emerald-500 text-black border-emerald-500" : "bg-zinc-700 text-zinc-200 border-white/10"}`}>{t.initials}</div>
+                      <div className={`h-8 w-8 rounded-full grid place-items-center text-xs font-black border ${!isAvailable ? "bg-amber-500 text-black border-amber-500" : "bg-emerald-500 text-black border-emerald-500"}`}>{initialsFromName(t.name)}</div>
                       <div className="min-w-0">
                         <div className="text-xs font-bold leading-none truncate">{t.name}</div>
-                        <div className="text-[11px] text-zinc-400 truncate">{t.skill.join(" • ") || "Drop RO to assign"}</div>
+                        <div className="text-[11px] text-zinc-400 truncate">{t.certifications.join(" • ") || "Drop RO to assign"}</div>
                       </div>
                     </div>
                     <div className="mt-2 flex items-center gap-1.5">
                       <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-full bg-sky-500" style={{ width: `${(t.flagged / t.capacity) * 100}%` }} />
+                        <div className="h-full bg-sky-500 transition-all duration-700" style={{ width: `${Math.min(100, barPct)}%` }} />
                       </div>
-                      <span className="text-[11px] font-mono font-bold">{t.flagged.toFixed(1)}h / {t.capacity}h</span>
+                      <span className="text-[11px] font-mono font-bold">{t.hoursFlaggedMTD.toFixed(1)}h / {t.hoursClockedMTD.toFixed(1)}h</span>
                     </div>
-                    <div className="mt-1 flex gap-1 flex-wrap">
-                      {t.skill.slice(0, 2).map((s) => (
+                    <div className="mt-1 flex gap-1 flex-wrap items-center">
+                      {t.certifications.slice(0, 2).map((s) => (
                         <span key={s} className="text-[10px] font-bold tracking-widest bg-white text-black px-1.5 py-0.5 rounded">{s}</span>
                       ))}
-                      {t.status !== "available" && <span className="text-[10px] font-bold tracking-widest bg-amber-500 text-black px-1.5 py-0.5 rounded">● BUSY</span>}
-                      {t.status === "available" && t.id !== "T4" && <span className="text-[10px] font-bold tracking-widest bg-emerald-500 text-black px-1.5 py-0.5 rounded">● READY</span>}
+                      <span className={`text-[10px] font-bold tracking-widest px-1.5 py-0.5 rounded ${eff >= 100 ? "bg-violet-500 text-white" : eff >= 90 ? "bg-emerald-500 text-black" : "bg-zinc-700 text-zinc-200"}`}>{eff}% EFF</span>
+                      {!isAvailable && <span className="text-[10px] font-bold tracking-widest bg-amber-500 text-black px-1.5 py-0.5 rounded">● BUSY</span>}
+                      {isAvailable && <span className="text-[10px] font-bold tracking-widest bg-emerald-500 text-black px-1.5 py-0.5 rounded">● READY</span>}
                     </div>
                   </div>
 
                   <div className="flex-1 p-2 space-y-2">
-                    {t.jobs.length === 0 ? (
+                    {techROs.length === 0 ? (
                       <div className="h-full min-h-[120px] rounded-xl border-2 border-dashed border-white/10 grid place-items-center p-4 text-center">
                         <div>
                           <div className="mx-auto h-8 w-8 rounded-full bg-white/10 grid place-items-center"><Package className="h-4 w-4 text-zinc-400" /></div>
@@ -512,20 +599,20 @@ export default function ServiceLane() {
                         </div>
                       </div>
                     ) : (
-                      t.jobs.map((j) => {
-                        const m = statusMeta[j.status]
+                      techROs.map((r) => {
+                        const m = storeStatusMeta[r.status] ?? storeStatusMeta.open
                         return (
-                          <div key={j.ro} className="rounded-xl bg-zinc-950 border border-white/10 p-3 hover:border-white/20 transition">
+                          <div key={r.id} className="rounded-xl bg-zinc-950 border border-white/10 p-3 hover:border-white/20 transition">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-black">RO {j.ro}</span>
+                              <span className="text-xs font-black">{r.roNumber}</span>
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${m.color}`}>{m.label}</span>
                             </div>
-                            <div className="text-xs font-medium mt-1">{j.op}</div>
+                            <div className="text-xs font-medium mt-1 line-clamp-1">{r.concern.slice(0,28)}</div>
                             <div className="mt-2 flex items-center justify-between">
-                              <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-white text-black px-1.5 py-0.5 rounded font-bold"><Flag className="h-3 w-3" /> {j.hrs}h</span>
-                              <span className="text-[11px] text-zinc-500">Bay {j.ro.slice(-1)}</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-white text-black px-1.5 py-0.5 rounded font-bold"><Flag className="h-3 w-3" /> {r.dispatch?.flaggedHours ?? 0}h</span>
+                              <span className="text-[11px] text-zinc-500">{r.dispatch?.bay ?? `Bay ${r.roNumber.slice(-1)}`}</span>
                             </div>
-                            {j.ro === "88342" && (
+                            {r.status === "waiting_approval" && (
                               <div className="mt-2 rounded-lg bg-amber-500/15 border border-amber-500/20 px-2 py-1.5 flex items-center gap-1.5">
                                 <Hourglass className="h-3 w-3 text-amber-400" weight="bold" />
                                 <span className="text-[11px] font-bold text-amber-200">Waiting customer auth</span>
@@ -535,20 +622,19 @@ export default function ServiceLane() {
                         )
                       })
                     )}
-                    {t.id !== "T4" && (
-                      <button className="w-full rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/10 text-xs font-semibold py-2 flex items-center justify-center gap-1">
-                        <ArrowRight className="h-3 w-3" /> Dispatch next
-                      </button>
-                    )}
+                    <button className="w-full rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/10 text-xs font-semibold py-2 flex items-center justify-center gap-1">
+                      <ArrowRight className="h-3 w-3" /> Dispatch next
+                    </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="px-4 py-3 border-t border-white/[0.06] bg-white/[0.03] flex flex-wrap items-center gap-2 text-xs">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Flag hrs live from RO labor ops</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Flag hrs live from RO labor ops • +2.5h on complete</span>
               <span className="opacity-20">•</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-500" /> Skill match boosts first-time fix</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-500" /> Skill match boosts first-time fix • {avgEfficiency}% avg eff</span>
               <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white text-black font-bold px-2.5 py-1"><Sparkle className="h-3 w-3" /> Auto-dispatch enabled</span>
             </div>
           </motion.div>
@@ -560,10 +646,10 @@ export default function ServiceLane() {
                 <div className="h-8 w-8 rounded-lg bg-red-500 text-white grid place-items-center"><VideoCamera className="h-4 w-4" weight="fill" /></div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">Video MPI • {selectedRO.ro}</span>
+                    <span className="text-sm font-bold">Video MPI • {selectedRO ? selectedRO.roNumber : "—"}</span>
                     <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-red-500 text-white text-[11px] font-black px-2 py-0.5"><span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" /> REC • ShopCam</span>
                   </div>
-                  <div className="text-xs text-zinc-400">{selectedRO.customer} • {selectedRO.vehicle} • Tech: {selectedRO.tech ?? "Unassigned"}</div>
+                  <div className="text-xs text-zinc-400">{selectedRO ? `${selectedRO.customerName} • ${vehicleLabel(selectedRO.vehicle)} • Tech: ${selectedRO.technicianName ?? "Unassigned"}` : "Select an RO"}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -589,58 +675,72 @@ export default function ServiceLane() {
 
             {/* MPI items */}
             <div className="divide-y divide-white/[0.06] max-h-[520px] overflow-auto">
-              {mpi.map((m) => (
+              {selectedRO && selectedRO.mpiItems.length > 0 ? selectedRO.mpiItems.map((m, idx) => {
+                const decision = getDecision(m)
+                const pricing = getPricing(m)
+                const severity = (m.status as string)
+                const isRed = severity === "red"
+                const isYellow = severity === "yellow"
+                const isGreen = severity === "green"
+                const hasVideo = Boolean(m.videoUrl)
+                const hasPhoto = Boolean(m.photoUrl)
+                return (
                 <div key={m.id} className="px-4 py-4 flex gap-4 hover:bg-white/[0.03] transition">
-                  <div className={`h-10 w-10 rounded-xl grid place-items-center shrink-0 border ${m.severity === "red" ? "bg-red-500 text-white border-red-500" : m.severity === "yellow" ? "bg-amber-500 text-black border-amber-500" : "bg-emerald-500 text-white border-emerald-500"}`}>
-                    {m.severity === "red" ? <WarningCircle className="h-5 w-5" weight="fill" /> : m.severity === "yellow" ? <WarningCircle className="h-5 w-5" weight="bold" /> : <CheckCircle className="h-5 w-5" weight="fill" />}
+                  <div className={`h-10 w-10 rounded-xl grid place-items-center shrink-0 border ${isRed ? "bg-red-500 text-white border-red-500" : isYellow ? "bg-amber-500 text-black border-amber-500" : isGreen ? "bg-emerald-500 text-white border-emerald-500" : decision === "approved" ? "bg-emerald-500 text-white border-emerald-500" : decision === "declined" ? "bg-zinc-700 text-white border-zinc-700" : "bg-amber-500 text-black border-amber-500"}`}>
+                    {isRed ? <WarningCircle className="h-5 w-5" weight="fill" /> : isYellow ? <WarningCircle className="h-5 w-5" weight="bold" /> : <CheckCircle className="h-5 w-5" weight="fill" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[11px] font-black tracking-widest bg-white text-black px-1.5 py-0.5 rounded">{m.category}</span>
                       <span className="text-sm font-bold">{m.item}</span>
-                      {m.hasVideo && <span className="inline-flex items-center gap-1 rounded-full bg-red-500 text-white text-[11px] font-bold px-2 py-0.5"><Play className="h-3 w-3" weight="fill" /> Video</span>}
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/10 text-[11px] font-semibold px-2 py-0.5"><Camera className="h-3 w-3" /> {m.photos} photos</span>
+                      {hasVideo && <span className="inline-flex items-center gap-1 rounded-full bg-red-500 text-white text-[11px] font-bold px-2 py-0.5"><Play className="h-3 w-3" weight="fill" /> Video</span>}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/10 text-[11px] font-semibold px-2 py-0.5"><Camera className="h-3 w-3" /> {hasPhoto ? 1 : 0} photos</span>
                       <span className="ml-auto flex items-center gap-1.5">
-                        {m.decision === "approved" && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-xs font-bold px-2.5 py-1"><Check className="h-3 w-3" weight="bold" /> Approved</span>}
-                        {m.decision === "declined" && <span className="inline-flex items-center gap-1 rounded-full bg-zinc-700 text-white text-xs font-bold px-2.5 py-1"><X className="h-3 w-3" weight="bold" /> Declined</span>}
-                        {m.decision === "deferred" && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 text-black text-xs font-bold px-2.5 py-1"><BookmarkSimple className="h-3 w-3" weight="bold" /> Deferred</span>}
-                        {m.decision === "pending" && <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/10 text-zinc-300 text-xs font-bold px-2.5 py-1">Pending</span>}
+                        {decision === "approved" && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-xs font-bold px-2.5 py-1"><Check className="h-3 w-3" weight="bold" /> Approved</span>}
+                        {decision === "declined" && <span className="inline-flex items-center gap-1 rounded-full bg-zinc-700 text-white text-xs font-bold px-2.5 py-1"><X className="h-3 w-3" weight="bold" /> Declined</span>}
+                        {decision === "deferred" && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 text-black text-xs font-bold px-2.5 py-1"><BookmarkSimple className="h-3 w-3" weight="bold" /> Deferred</span>}
+                        {decision === "pending" && <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/10 text-zinc-300 text-xs font-bold px-2.5 py-1">Pending</span>}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-300 mt-1 leading-relaxed">{m.rec}</p>
-                    <p className="text-[11px] text-zinc-500 mt-1 italic">Tech note: {m.techNote}</p>
+                    <p className="text-xs text-zinc-300 mt-1 leading-relaxed">{m.recommendation} {m.measurement ? `• ${m.measurement}` : ""} {m.spec ? `• Spec: ${m.spec}` : ""}</p>
+                    {m.laborOp && <p className="text-[11px] text-zinc-500 mt-1 italic">Op: {m.laborOp} {m.partsRequired?.length ? `• Parts: ${m.partsRequired.join(", ")}` : ""}</p>}
 
-                    {/* Pricing row - matrix integration */}
-                    {m.matrixPrice > 0 ? (
+                    {/* Pricing row - matrix integration — keep list vs matrix intact */}
+                    {pricing ? (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <div className="flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2">
                           <span className="text-[11px] font-bold tracking-widest opacity-60">LIST</span>
-                          <span className="text-sm font-bold line-through decoration-2 opacity-60">${m.listPrice}</span>
+                          <span className="text-sm font-bold line-through decoration-2 opacity-60">${pricing.list}</span>
                           <ArrowRight className="h-3 w-3 opacity-40" />
                           <span className="text-[11px] font-bold tracking-widest">MATRIX</span>
-                          <span className="text-sm font-black">${m.matrixPrice}</span>
-                          <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded">+{Math.round(((m.matrixPrice - m.listPrice) / m.listPrice) * 100)}%</span>
+                          <span className="text-sm font-black">${pricing.matrix}</span>
+                          <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded">+{pricing.uplift}%</span>
                         </div>
-                        <span className="text-[11px] font-mono bg-white/10 border border-white/10 px-2 py-1 rounded-full">Cost ${m.cost} • {m.laborHrs}h • Margin {Math.round(((m.matrixPrice - m.cost) / m.matrixPrice) * 100)}%</span>
+                        <span className="text-[11px] font-mono bg-white/10 border border-white/10 px-2 py-1 rounded-full">Cost ${pricing.cost} • {pricing.laborHrs}h • Margin {pricing.margin}%</span>
                         <span className="ml-auto flex gap-1.5">
-                          <button onClick={() => toggleMpi(m.id, "approved")} className={`h-8 w-8 rounded-full grid place-items-center border transition ${m.decision === "approved" ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white text-black border-white hover:bg-zinc-100"}`}><ThumbsUp className="h-4 w-4" weight="bold" /></button>
-                          <button onClick={() => toggleMpi(m.id, "declined")} className={`h-8 w-8 rounded-full grid place-items-center border transition ${m.decision === "declined" ? "bg-zinc-700 border-zinc-700 text-white" : "bg-white/10 border-white/10 text-white hover:bg-white/15"}`}><ThumbsDown className="h-4 w-4" /></button>
-                          <button onClick={() => toggleMpi(m.id, "deferred")} className={`rounded-full px-3 text-xs font-bold border transition ${m.decision === "deferred" ? "bg-amber-500 border-amber-500 text-black" : "bg-white/10 border-white/10 text-white hover:bg-white/15"}`}>Defer</button>
+                          <button onClick={() => handleMpiDecision(selectedRO.id, idx, true)} className={`h-8 w-8 rounded-full grid place-items-center border transition ${decision === "approved" ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white text-black border-white hover:bg-zinc-100"}`} title="Approve"><ThumbsUp className="h-4 w-4" weight="bold" /></button>
+                          <button onClick={() => handleMpiDecision(selectedRO.id, idx, false)} className={`h-8 w-8 rounded-full grid place-items-center border transition ${decision === "declined" ? "bg-zinc-700 border-zinc-700 text-white" : "bg-white/10 border-white/10 text-white hover:bg-white/15"}`} title="Decline"><ThumbsDown className="h-4 w-4" /></button>
+                          <button onClick={() => handleMpiDecision(selectedRO.id, idx, false)} className={`rounded-full px-3 text-xs font-bold border transition ${decision === "deferred" ? "bg-amber-500 border-amber-500 text-black" : "bg-white/10 border-white/10 text-white hover:bg-white/15"}`}>Defer</button>
                         </span>
                       </div>
                     ) : (
                       <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full"><Check className="h-3.5 w-3.5" weight="bold" /> No action — passed</div>
                     )}
 
-                    {/* media strip mock */}
+                    {/* media strip */}
                     <div className="mt-3 flex gap-2">
-                      {Array.from({ length: m.photos }).map((_, i) => (
-                        <div key={i} className="h-14 w-20 rounded-lg bg-zinc-800 border border-white/10 overflow-hidden relative group cursor-pointer">
-                          <img src={`https://picsum.photos/seed/${m.id}${i}/160/100`} alt="" className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition" />
+                      {hasPhoto && (
+                        <div className="h-14 w-20 rounded-lg bg-zinc-800 border border-white/10 overflow-hidden relative group cursor-pointer">
+                          <img src={m.photoUrl} alt="" className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition" />
                           <span className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition bg-black/30"><Eye className="h-4 w-4 text-white" weight="bold" /></span>
                         </div>
-                      ))}
-                      {m.hasVideo && (
+                      )}
+                      {!hasPhoto && (
+                        <div className="h-14 w-20 rounded-lg bg-zinc-800 border border-white/10 overflow-hidden relative">
+                          <img src={`https://picsum.photos/seed/${m.id}/160/100`} alt="" className="h-full w-full object-cover opacity-40" />
+                        </div>
+                      )}
+                      {hasVideo && (
                         <div className="h-14 w-20 rounded-lg bg-red-950 border border-red-500/30 overflow-hidden relative grid place-items-center cursor-pointer">
                           <Play className="h-6 w-6 text-red-400" weight="fill" />
                           <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[10px] font-bold text-white text-center py-0.5">0:24</span>
@@ -649,7 +749,13 @@ export default function ServiceLane() {
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              }) : (
+                <div className="px-4 py-12 text-center">
+                  <div className="text-sm font-semibold text-zinc-300">No MPI items</div>
+                  <div className="text-xs text-zinc-500 mt-1">Select an RO with MPI or create one from an appointment</div>
+                </div>
+              )}
             </div>
 
             <div className="px-4 py-3 bg-white/[0.03] border-t border-white/[0.06] flex flex-wrap items-center gap-2">
@@ -672,7 +778,7 @@ export default function ServiceLane() {
                     <div className="text-xs text-zinc-400">Follows VIN • auto-recall next visit</div>
                   </div>
                 </div>
-                <span className="text-xs font-mono bg-amber-500 text-black px-2 py-1 rounded-full font-bold">{DEFERRED.length + mpi.filter((m) => m.decision === "deferred").length} items</span>
+                <span className="text-xs font-mono bg-amber-500 text-black px-2 py-1 rounded-full font-bold">{DEFERRED.length + (selectedRO ? selectedRO.mpiItems.filter((m)=> getDecision(m)==="deferred" || getDecision(m)==="declined").length : 0)} items</span>
               </div>
               <div className="divide-y divide-white/[0.06]">
                 {DEFERRED.map((d) => (
@@ -689,18 +795,19 @@ export default function ServiceLane() {
                     </div>
                   </div>
                 ))}
-                {mpi
-                  .filter((m) => m.decision === "deferred")
-                  .map((m) => (
+                {selectedRO && selectedRO.mpiItems.filter((m) => getDecision(m)==="deferred" || getDecision(m)==="declined").map((m) => {
+                  const pricing = getPricing(m)
+                  return (
                     <div key={m.id} className="px-4 py-3 flex gap-3 bg-amber-500/5">
                       <div className="h-8 w-8 rounded-lg bg-amber-500 text-black grid place-items-center shrink-0"><BookmarkSimple className="h-4 w-4" weight="bold" /></div>
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold">{m.item} • live defer</div>
-                        <div className="text-[11px] text-zinc-500">Just deferred • will auto-attach next RO for this VIN</div>
+                        <div className="text-[11px] text-zinc-500">{getDecision(m)==="declined" ? "Declined" : "Deferred"} • will auto-attach next RO for this VIN</div>
                       </div>
-                      <span className="text-[11px] font-bold text-amber-300">${m.matrixPrice}</span>
+                      <span className="text-[11px] font-bold text-amber-300">${pricing?.matrix ?? m.retailAmount ?? 0}</span>
                     </div>
-                  ))}
+                  )
+                })}
               </div>
               <div className="px-4 py-3 bg-amber-500/10 border-t border-amber-500/20 flex items-center gap-2 text-xs font-medium text-amber-200">
                 <Car className="h-3.5 w-3.5" /> Retention: +23% rebook when deferred auto-surfaces at next write-up
@@ -723,7 +830,7 @@ export default function ServiceLane() {
               <div className="p-4 space-y-3">
                 <div className="rounded-2xl bg-white text-zinc-900 p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black tracking-widest text-zinc-500">INVOICE • {selectedRO.ro} • {selectedRO.customer}</span>
+                    <span className="text-[11px] font-black tracking-widest text-zinc-500">INVOICE • {selectedRO ? selectedRO.roNumber : "—"} • {selectedRO ? selectedRO.customerName : ""}</span>
                     <span className="text-[11px] font-bold bg-zinc-900 text-white px-2 py-0.5 rounded-full">Due on pickup</span>
                   </div>
                   <div className="mt-3 space-y-1.5 text-sm">
@@ -759,13 +866,13 @@ export default function ServiceLane() {
                   {showPayLink && (
                     <motion.div initial={{ opacity: 0, y: 8, height: 0 }} animate={{ opacity: 1, y: 0, height: "auto" }} exit={{ opacity: 0, y: 8, height: 0 }} className="overflow-hidden">
                       <div className="rounded-2xl bg-black border border-white/10 p-4">
-                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-400"><LinkIcon className="h-3.5 w-3.5" /> pay.autocore.app/r/88342-9K2 • expires in 48h</div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-400"><LinkIcon className="h-3.5 w-3.5" /> pay.autocore.app/r/{selectedRO ? selectedRO.roNumber.replace(/\s/g,"") : "88342"}-9K2 • expires in 48h</div>
                         <div className="mt-3 rounded-xl bg-white p-3 flex gap-3">
                           <div className="h-20 w-20 rounded-lg bg-zinc-900 grid place-items-center shrink-0">
                             <div className="h-16 w-16 bg-[repeating-linear-gradient(0deg,#000_0_2px,#fff_0_4px)] opacity-80" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs font-black">Scan to pay — {selectedRO.customer}</div>
+                            <div className="text-xs font-black">Scan to pay — {selectedRO ? selectedRO.customerName : ""}</div>
                             <div className="text-[11px] text-zinc-500 leading-relaxed mt-1">Customer taps approve on MPI video, then pays. RO auto-marks “paid” • receipt SMS’d • cashier skips line.</div>
                             <div className="mt-2 flex gap-1.5">
                               <span className="text-[11px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">Paid $716 ✓</span>
@@ -809,7 +916,7 @@ export default function ServiceLane() {
           <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1">F4 RO + Dispatch</span>
           <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1">F13 Video MPI + matrix</span>
           <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1">F15 Pay-by-link</span>
-          <span className="ml-auto hidden sm:inline">AutoCore ERP • Fixed Ops Demo • Tailwind + Motion + Phosphor • bento grid</span>
+          <span className="ml-auto hidden sm:inline">AutoCore ERP • Fixed Ops Demo • Tailwind + Motion + Phosphor • bento grid • store wired F4</span>
         </div>
       </div>
     </div>

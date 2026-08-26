@@ -69,6 +69,26 @@ function statusMeta(s: VehicleStatus) {
       return { label: "Wholesale", variant: "danger" as const }
   }
 }
+function reconMeta(s: string) {
+  switch (s) {
+    case "in_progress":
+      return { label: "In Progress", variant: "warning" as const }
+    case "completed":
+    case "complete":
+      return { label: "Completed", variant: "success" as const }
+    case "not_started":
+      return { label: "Not Started", variant: "neutral" as const }
+    case "n/a":
+      return { label: "N/A", variant: "neutral" as const }
+    default:
+      return { label: s, variant: "neutral" as const }
+  }
+}
+function destLabel(id: RooftopId) {
+  if (id === "north") return "North Ford"
+  if (id === "dtown") return "Downtown Toyota"
+  return "Westside"
+}
 
 /* pricing history mock derived per vehicle – deterministic */
 function priceHistory(v: Vehicle) {
@@ -113,6 +133,9 @@ export default function Inventory() {
   const storeVehicles = useStore(s=> s.vehicles)
   const vehicles = storeVehicles.length ? storeVehicles as unknown as Vehicle[] : seedVehicles
   const deals = useStore(s=> s.deals)
+  const setVehicleRecon = useStore(s=> s.setVehicleRecon)
+  const setVehiclePrice = useStore(s=> s.setVehiclePrice)
+  const transferVehicle = useStore(s=> s.transferVehicle)
   const [rooftop, setRooftop] = useState<RooftopFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [make, setMake] = useState<MakeFilter>("all")
@@ -120,6 +143,11 @@ export default function Inventory() {
   const [selectedId, setSelectedId] = useState<string | null>("VEH-003")
   const [showTransfer, setShowTransfer] = useState(false)
   const [destRooftop, setDestRooftop] = useState<RooftopId>("north")
+  const [toast, setToast] = useState<string | null>(null)
+  const showToast = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 2800)
+  }
 
   const selected = useMemo(() => vehicles.find((v) => v.id === selectedId) ?? null, [selectedId, vehicles])
 
@@ -547,6 +575,79 @@ export default function Inventory() {
                 </div>
 
                 <div className="space-y-4 p-4">
+                  {/* ── Recon lifecycle — F2 ── */}
+                  <section className="surface overflow-hidden p-0">
+                    <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5">
+                      <h3 className="inline-flex items-center gap-2 text-[12px] font-semibold">
+                        <Wrench size={14} className="text-[var(--accent)]" /> Recon lifecycle
+                        <span className="rounded-full bg-white px-1.5 py-0.5 font-mono text-[10px] font-medium text-[var(--text-muted)] shadow-sm">F2 • Bay 2</span>
+                      </h3>
+                      <Badge variant={reconMeta((selected as unknown as { reconStatus: string }).reconStatus).variant} className="gap-1">
+                        {(selected as unknown as { reconStatus: string }).reconStatus === "in_progress" && <Clock size={12} />}
+                        {(selected as unknown as { reconStatus: string }).reconStatus === "completed" || (selected as unknown as { reconStatus: string }).reconStatus === "complete" ? <CheckCircle size={12} weight="fill" /> : null}
+                        {reconMeta((selected as unknown as { reconStatus: string }).reconStatus).label}
+                      </Badge>
+                    </div>
+                    <div className="p-3.5 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (selectedId) setVehicleRecon(selectedId, "in_progress")
+                          }}
+                          disabled={(selected as unknown as { reconStatus: string }).reconStatus === "in_progress" || (selected as unknown as { reconStatus: string }).reconStatus === "completed" || (selected as unknown as { reconStatus: string }).reconStatus === "complete"}
+                        >
+                          <Wrench size={12} weight="bold" /> Start Recon
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (selectedId) setVehicleRecon(selectedId, "complete")
+                          }}
+                          disabled={(selected as unknown as { reconStatus: string }).reconStatus !== "in_progress"}
+                          className="bg-white"
+                        >
+                          <CheckCircle size={12} weight="fill" /> Complete Recon
+                        </Button>
+                        <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-muted)]">
+                          reconStatus: <span className="font-semibold text-[var(--text-primary)]">{(selected as unknown as { reconStatus: string }).reconStatus}</span>
+                        </span>
+                      </div>
+
+                      {(selected as unknown as { reconStatus: string }).reconStatus === "in_progress" && (
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
+                          <div>
+                            <div className="text-[12px] font-semibold leading-none text-amber-900">RO-8842 • Internal RO</div>
+                            <div className="text-[11px] leading-none text-amber-800 mt-1">Bay 2 • Est. 4/28 • Tires, detail, windshield</div>
+                            <a href="#" onClick={(e)=>e.preventDefault()} className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 underline-offset-2 hover:underline">
+                              Internal RO link • RO-8842 <ArrowSquareOut size={10} />
+                            </a>
+                          </div>
+                          <Badge variant="warning" className="shrink-0">In Bay</Badge>
+                        </div>
+                      )}
+
+                      {((selected as unknown as { reconStatus: string }).reconStatus === "completed" || (selected as unknown as { reconStatus: string }).reconStatus === "complete") && (
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                          <div className="text-[12px] font-medium text-emerald-800">
+                            Cost roll-up <span className="font-mono font-[700]">$1,240</span> posted to VIN P&L • <span className="font-mono">{fmt(selected.reconCost)}</span> total recon
+                          </div>
+                          <Badge variant="success" className="shrink-0 gap-1"><CheckCircle size={12} weight="fill" /> Completed</Badge>
+                        </div>
+                      )}
+
+                      {(selected as unknown as { reconStatus: string }).reconStatus === "not_started" && (
+                        <p className="text-[11px] leading-snug text-[var(--text-muted)]">Not started — tap <span className="font-medium text-[var(--text-primary)]">Start Recon</span> to open internal RO-8842 and move to Bay 2.</p>
+                      )}
+
+                      <div className="flex items-center justify-between rounded-lg bg-[var(--surface-muted)] px-2.5 py-1.5 font-mono text-[11px] text-[var(--text-muted)]">
+                        <span>Status syncs to store • {selected.status}</span>
+                        <span className="font-medium text-[var(--text-secondary)]">Recon {fmt(selected.reconCost)}</span>
+                      </div>
+                    </div>
+                  </section>
+
                   {/* Appraisal workflow — KBB + condition + RO link */}
                   <section className="surface overflow-hidden p-0">
                     <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5">
@@ -625,8 +726,21 @@ export default function Inventory() {
                             <div className="font-mono text-[13px] font-semibold">{fmt(selected.listPrice)}</div>
                           </div>
                           <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-muted)] p-2.5">
-                            <div className="text-label-mono text-[var(--accent)]">Internet</div>
-                            <div className="font-mono text-[13px] font-[700] text-[var(--accent)]">{fmt(selected.internetPrice)}</div>
+                            <div className="text-label-mono text-[var(--accent)]">Internet • editable</div>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">$</span>
+                              <Input
+                                type="number"
+                                value={selected.internetPrice}
+                                onChange={(e) => {
+                                  const newPrice = Number(e.target.value)
+                                  if (!Number.isNaN(newPrice) && selectedId) setVehiclePrice(selectedId, newPrice)
+                                }}
+                                className="h-7 flex-1 bg-white font-mono text-[13px] font-[700] text-[var(--accent)]"
+                                aria-label="Internet price"
+                              />
+                            </div>
+                            <div className="mt-1 font-mono text-[10px] text-[var(--accent)]/70">{fmt(selected.internetPrice)} • sparkline updates</div>
                           </div>
                         </div>
                         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5">
@@ -839,8 +953,14 @@ export default function Inventory() {
                     className="flex-1"
                     disabled={!transferPreview}
                     onClick={() => {
+                      if (selected) {
+                        transferVehicle(selected.id, destRooftop)
+                        const msg = destRooftop === "north"
+                          ? "Transferred to North Ford • GL 1300/1400 posted • 15min feed queued"
+                          : `Transferred to ${destLabel(destRooftop)} • GL 1300/1400 posted • 15min feed queued`
+                        showToast(msg)
+                      }
                       setShowTransfer(false)
-                      setSelectedId(null)
                     }}
                   >
                     Confirm transfer • {transferPreview?.to.split(" ")[1] ?? "Confirm"}
@@ -850,6 +970,27 @@ export default function Inventory() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Toast — F17 transfer confirmation ── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed bottom-5 right-5 z-[70] flex max-w-[420px] items-center gap-2.5 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-[12px] font-medium text-white shadow-2xl"
+          >
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
+              <CheckCircle size={14} weight="fill" />
+            </span>
+            <span className="leading-snug">{toast}</span>
+            <button onClick={() => setToast(null)} className="ml-2 shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white">
+              <X size={12} weight="bold" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 

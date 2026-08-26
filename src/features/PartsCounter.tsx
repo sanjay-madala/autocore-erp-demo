@@ -34,9 +34,11 @@ import {
   Eye,
   Link as LinkIcon,
 } from "@phosphor-icons/react"
+import { useStore } from "@/lib/store"
+import type { Part as StorePart } from "@/data/parts"
 
 // ──────────────────────────────────────────
-// Matrix pricing engine — the hero
+// Matrix pricing engine — the hero (kept intact, M2/M4 highlighted)
 // ──────────────────────────────────────────
 type MatrixRow = { range: string; costMin: number; costMax: number | null; markupPct: number; exampleCost: number; list: number; matrix: number }
 const MATRIX: MatrixRow[] = [
@@ -50,68 +52,77 @@ const MATRIX: MatrixRow[] = [
 
 type PriceLevel = "retail" | "wholesale" | "internal" | "bodyshop"
 
-type Part = {
-  id: string
-  partNo: string
-  desc: string
-  category: string
-  brand: string
-  vinFit: string
-  cost: number
-  listPrice: number
-  matrixPrice: number
-  onHand: number
-  onOrder: number
-  bin: string
-  image: string
-  crossRef?: string
-  superseded?: string
-}
-
-const PARTS: Part[] = [
-  { id: "p1", partNo: "04465-33150", desc: "Brake Pad Set — Front (Ceramic)", category: "Brakes", brand: "Toyota Genuine", vinFit: "2020–24 Camry / 22–24 RAV4", cost: 68, listPrice: 125, matrixPrice: 219, onHand: 6, onOrder: 4, bin: "A-14-03", image: "https://picsum.photos/seed/brakepads/240/180", crossRef: "04465-AZ120", superseded: "04465-33140 → 33150" },
-  { id: "p2", partNo: "90915-YZZF2", desc: "Oil Filter Element", category: "Filters", brand: "Toyota Genuine", vinFit: "All 2.5L Dynamic Force", cost: 4.2, listPrice: 12.5, matrixPrice: 11.76, onHand: 48, onOrder: 0, bin: "C-02-11", image: "https://picsum.photos/seed/oilfilter/240/180" },
-  { id: "p3", partNo: "00272-SLLC2", desc: "Brake Fluid DOT4 — 12oz", category: "Fluids", brand: "Toyota", vinFit: "Universal", cost: 7.2, listPrice: 18, matrixPrice: 20.16, onHand: 22, onOrder: 0, bin: "F-01-04", image: "https://picsum.photos/seed/fluid/240/180" },
-  { id: "p4", partNo: "28800-0V030", desc: "Battery — 24F 650CCA AGM", category: "Battery", brand: "TrueStart", vinFit: "2018+ Camry / Highlander", cost: 168, listPrice: 289, matrixPrice: 345, onHand: 3, onOrder: 6, bin: "B-09-01", image: "https://picsum.photos/seed/battery/240/180" },
-  { id: "p5", partNo: "42110-33150", desc: "Shock Absorber — Rear RH", category: "Suspension", brand: "Toyota Genuine", vinFit: "2018–24 Camry", cost: 156, listPrice: 310, matrixPrice: 226.2, onHand: 0, onOrder: 8, bin: "S-03-07", image: "https://picsum.photos/seed/shock/240/180" },
-  { id: "p6", partNo: "42611-0E040", desc: "Wheel — Alloy 18″ (Take-off)", category: "Wheels", brand: "Toyota", vinFit: "2021+ Highlander", cost: 285, listPrice: 520, matrixPrice: 384.75, onHand: 2, onOrder: 0, bin: "W-01-02", image: "https://picsum.photos/seed/wheel/240/180" },
-]
-
 const WHOLESALE_ACCOUNTS = [
   { name: "ACME Body Shop #441", terms: "Net 20", balance: 18420, limit: 50000, discount: "Wholesale -15% off matrix" },
   { name: "North Fulton Toyota (Transfer)", terms: "Due on receipt", balance: 0, limit: 0, discount: "Cross-rooftop at cost+" },
   { name: "QuickLane Wholesale", terms: "Net 10", balance: 4200, limit: 15000, discount: "Wholesale flat" },
 ]
 
-type QuoteLine = { partId: string; qty: number; priceLevel: PriceLevel }
+type QuoteLine = { partNumber: string; qty: number; priceLevel: PriceLevel }
+
+// helpers for store Part -> UI
+const getBin = (p: StorePart) => p.bins[0]?.bin ?? "A-01-01"
+const getImage = (p: StorePart) => `https://picsum.photos/seed/${p.partNumber.replace(/[^a-zA-Z0-9]/g, "")}/240/180`
+const getVinFit = (p: StorePart) => {
+  // try to extract fitment from description parenthesis
+  const m = p.description.match(/\(([^)]+)\)/)
+  if (m) return m[1]
+  if (p.make === "Universal") return "Universal fitment"
+  if (p.make === "Toyota") return "2020–24 Camry / RAV4 • VIN verified"
+  if (p.make === "Ford") return "2021–25 F-150 • VIN verified"
+  if (p.make === "Honda") return "2018–25 Accord / Civic • VIN verified"
+  if (p.make === "BMW") return "2019+ X5 / 3-Series • VIN verified"
+  if (p.make === "Hyundai") return "2020+ Palisade / Santa Fe • VIN verified"
+  return `${p.make} fitment`
+}
 
 export default function PartsCounter() {
+  const partsStore = useStore((s) => s.parts)
+  const sellPart = useStore((s) => s.sellPart)
+  const createShortSale = useStore((s) => s.createShortSale)
+
   const [vin, setVin] = useState("4T1G11AK2RU771842")
   const [q, setQ] = useState("")
   const [cat, setCat] = useState<string>("All")
-  const [selectedPartId, setSelectedPartId] = useState<string>("p1")
+  const [selectedPartNumber, setSelectedPartNumber] = useState<string>(() => partsStore[0]?.partNumber ?? "04465-33150")
   const [priceLevel, setPriceLevel] = useState<PriceLevel>("retail")
   const [qty, setQty] = useState(1)
-  const [quoteLines, setQuoteLines] = useState<QuoteLine[]>([
-    { partId: "p1", qty: 1, priceLevel: "retail" },
-    { partId: "p3", qty: 1, priceLevel: "retail" },
+  const [quoteLines, setQuoteLines] = useState<QuoteLine[]>(() => [
+    { partNumber: "04465-33150", qty: 1, priceLevel: "retail" },
+    { partNumber: "CHEM-BRK-12", qty: 1, priceLevel: "retail" },
   ])
   const [scanOpen, setScanOpen] = useState(false)
   const [scanValue, setScanValue] = useState("")
   const [invoiced, setInvoiced] = useState(false)
   const [poCreated, setPoCreated] = useState(false)
 
-  const selectedPart = PARTS.find((p) => p.id === selectedPartId) ?? PARTS[0]
+  // animations for live decrement / increment
+  const [onHandAnim, setOnHandAnim] = useState<{ before: number; after: number } | null>(null)
+  const [onOrderAnim, setOnOrderAnim] = useState<{ before: number; after: number } | null>(null)
+  const [saleBanner, setSaleBanner] = useState<{ partNumber: string; qty: number; price: number } | null>(null)
+  const [shortSaleBanner, setShortSaleBanner] = useState<{ partNumber: string; qty: number } | null>(null)
+
+  const selectedPart = useMemo(() => {
+    return partsStore.find((p) => p.partNumber === selectedPartNumber) ?? partsStore[0]
+  }, [partsStore, selectedPartNumber])
+
+  // keep selection valid if store changes
+  // (if selectedPartNumber not found, fallback to first)
+
+  const categories = useMemo(() => {
+    const uniq = Array.from(new Set(partsStore.map((p) => p.category)))
+    return ["All", ...uniq]
+  }, [partsStore])
 
   const filtered = useMemo(() => {
-    return PARTS.filter((p) => {
+    return partsStore.filter((p) => {
       if (cat !== "All" && p.category !== cat) return false
-      if (q && !(p.partNo + p.desc + p.brand).toLowerCase().includes(q.toLowerCase())) return false
+      if (q && !(p.partNumber + p.description + p.make).toLowerCase().includes(q.toLowerCase())) return false
       return true
     })
-  }, [q, cat])
+  }, [q, cat, partsStore])
 
-  const priceFor = (part: Part, level: PriceLevel) => {
+  const priceFor = (part: StorePart, level: PriceLevel) => {
     const base = part.matrixPrice
     if (level === "retail") return base
     if (level === "wholesale") return Math.round(base * 0.82 * 100) / 100
@@ -124,23 +135,64 @@ export default function PartsCounter() {
     let subtotal = 0
     let listTotal = 0
     for (const l of quoteLines) {
-      const p = PARTS.find((x) => x.id === l.partId)!
+      const p = partsStore.find((x) => x.partNumber === l.partNumber)
+      if (!p) continue
       subtotal += priceFor(p, l.priceLevel) * l.qty
       listTotal += p.listPrice * l.qty
     }
     const tax = Math.round(subtotal * 0.07 * 100) / 100
     const uplift = subtotal - listTotal
     return { subtotal, listTotal, tax, total: subtotal + tax, uplift }
-  }, [quoteLines])
+  }, [quoteLines, partsStore])
 
-  const addToQuote = () => {
-    setQuoteLines((prev) => [...prev, { partId: selectedPartId, qty, priceLevel }])
+  const handleSell = () => {
+    if (!selectedPart) return
+    const before = selectedPart.onHand
+    if (before <= 0) return
+    const sellQty = Math.min(qty, before)
+    sellPart(selectedPart.partNumber, sellQty)
+    const after = Math.max(0, before - sellQty)
+    setOnHandAnim({ before, after })
+    setTimeout(() => setOnHandAnim(null), 2400)
+    setQuoteLines((prev) => [...prev, { partNumber: selectedPart.partNumber, qty: sellQty, priceLevel }])
+    setSaleBanner({ partNumber: selectedPart.partNumber, qty: sellQty, price: priceFor(selectedPart, priceLevel) })
+    setTimeout(() => setSaleBanner(null), 3500)
+    setShortSaleBanner(null)
+  }
+
+  const handleShortSale = () => {
+    if (!selectedPart) return
+    const before = selectedPart.onOrder
+    createShortSale(selectedPart.partNumber, qty)
+    const after = before + qty
+    setOnOrderAnim({ before, after })
+    setTimeout(() => setOnOrderAnim(null), 2400)
+    setQuoteLines((prev) => [...prev, { partNumber: selectedPart.partNumber, qty, priceLevel }])
+    setShortSaleBanner({ partNumber: selectedPart.partNumber, qty })
+    setTimeout(() => setShortSaleBanner(null), 4000)
+    setSaleBanner(null)
   }
 
   const removeLine = (idx: number) => setQuoteLines((prev) => prev.filter((_, i) => i !== idx))
 
-  // short-sale / backorder demo: p5 is 0 on hand but on order
-  const shortSalePart = PARTS.find((p) => p.id === "p5")!
+  // short-sale demo part: first with onHand===0
+  const shortSalePart = useMemo(() => {
+    return partsStore.find((p) => p.onHand === 0) ?? partsStore.find((p) => p.partNumber === "COL-BUMP-RAV4-19") ?? partsStore[0]
+  }, [partsStore])
+
+  // for stock order widget pick 3 representative parts
+  const stockOrderRows = useMemo(() => {
+    const a = partsStore.find((p) => p.partNumber === "04465-33150") ?? partsStore[1]
+    const b = partsStore.find((p) => p.partNumber === "00544-21171-710") ?? partsStore[4]
+    const c = partsStore.find((p) => p.partNumber === "COL-BUMP-RAV4-19") ?? partsStore.find((p) => p.onHand === 0) ?? partsStore[0]
+    return [
+      { part: a, min: a.minStock, max: a.maxStock, suggested: Math.max(0, a.maxStock - a.onHand) || 2 },
+      { part: b, min: b.minStock, max: b.maxStock, suggested: Math.max(0, b.maxStock - b.onHand) || 3 },
+      { part: c, min: c.minStock, max: c.maxStock, suggested: Math.max(0, c.maxStock - c.onHand) || 4 },
+    ]
+  }, [partsStore])
+
+  if (!selectedPart) return null
 
   return (
     <div className="min-h-screen bg-[#FCFCF9] text-zinc-900 selection:bg-amber-200">
@@ -182,7 +234,7 @@ export default function PartsCounter() {
         </div>
       </div>
 
-      {/* Hero — Matrix breakthrough */}
+      {/* Hero — Matrix breakthrough — keep M2/M4 hero intact */}
       <div className="max-w-[1440px] mx-auto px-6 pt-6">
         <div className="rounded-[24px] border border-amber-200 bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-200 p-[1.5px] shadow-[0_12px_32px_rgba(0,0,0,0.08)]">
           <div className="rounded-[22px] bg-white overflow-hidden">
@@ -208,12 +260,12 @@ export default function PartsCounter() {
                   </div>
                   <div className="rounded-2xl bg-amber-400 text-black p-3 border-2 border-amber-500">
                     <div className="text-[11px] font-black tracking-widest uppercase">Matrix ticket</div>
-                    <div className="text-xl font-black">$219.00</div>
-                    <div className="text-[11px] font-bold">+75% • cost-driven</div>
+                    <div className="text-xl font-black">${selectedPart.matrixPrice.toFixed(2)}</div>
+                    <div className="text-[11px] font-bold">+{Math.round(((selectedPart.matrixPrice - selectedPart.listPrice)/selectedPart.listPrice)*100)}% • cost-driven</div>
                   </div>
                   <div className="rounded-2xl bg-emerald-500 text-white p-3">
                     <div className="text-[11px] font-bold tracking-widest uppercase text-emerald-100">Margin kept</div>
-                    <div className="text-xl font-black">+$94</div>
+                    <div className="text-xl font-black">+${(priceFor(selectedPart,"retail") - selectedPart.listPrice).toFixed(0)}</div>
                     <div className="text-[11px] font-bold text-emerald-100">on this one pad</div>
                   </div>
                 </div>
@@ -224,7 +276,7 @@ export default function PartsCounter() {
                 </div>
               </div>
 
-              {/* Matrix table */}
+              {/* Matrix table — hero, M2/M4 highlighted */}
               <div className="col-span-12 lg:col-span-7 bg-zinc-50 border-t lg:border-t-0 lg:border-l border-zinc-200">
                 <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -251,9 +303,11 @@ export default function PartsCounter() {
                     <tbody className="divide-y divide-zinc-200">
                       {MATRIX.map((r) => {
                         const highlight = r.costMin === 50.01
+                        const isM2 = r.markupPct === 65
+                        const isM4 = r.markupPct === 180
                         return (
-                          <tr key={r.range} className={`${highlight ? "bg-amber-50" : r.markupPct >= 85 ? "bg-white" : "bg-zinc-50/50"} ${highlight ? "ring-1 ring-amber-300" : ""}`}>
-                            <td className="px-4 py-2.5 font-mono font-bold">{r.range}</td>
+                          <tr key={r.range} className={`${highlight ? "bg-amber-50" : r.markupPct >= 85 ? "bg-white" : "bg-zinc-50/50"} ${highlight ? "ring-1 ring-amber-300" : ""} ${isM2 || isM4 ? "font-bold" : ""}`}>
+                            <td className="px-4 py-2.5 font-mono font-bold">{r.range} {(isM2 || isM4) && <span className={`ml-1 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-black ${isM4 ? "bg-zinc-900 text-white" : "bg-amber-400 text-black"}`}>{isM4 ? "M4" : "M2"}</span>}</td>
                             <td className="px-2 py-2.5 text-center">
                               <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-black ${r.markupPct >= 120 ? "bg-zinc-900 text-white" : r.markupPct >= 65 ? "bg-amber-400 text-black" : "bg-white border border-zinc-200"}`}>
                                 +{r.markupPct}%
@@ -291,7 +345,7 @@ export default function PartsCounter() {
                 <div className="h-8 w-8 rounded-lg bg-zinc-900 text-white grid place-items-center"><MagnifyingGlass className="h-4 w-4" /></div>
                 <div>
                   <div className="text-sm font-black">VIN-Driven Catalog</div>
-                  <div className="text-xs text-zinc-500 font-medium">E8 • exact fit, no returns</div>
+                  <div className="text-xs text-zinc-500 font-medium">E8 • exact fit, no returns • {partsStore.length} SKUs live</div>
                 </div>
               </div>
 
@@ -316,7 +370,7 @@ export default function PartsCounter() {
                 <span className="hidden sm:inline text-xs font-medium text-zinc-600">2023 Camry SE 2.5L • Section: Brakes, Filters, Fluids</span>
               </div>
               <div className="ml-auto flex items-center gap-1.5 overflow-auto">
-                {["All", "Brakes", "Filters", "Fluids", "Battery", "Suspension", "Wheels"].map((c) => (
+                {categories.map((c) => (
                   <button key={c} onClick={() => setCat(c)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold border transition ${cat === c ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-zinc-200 hover:bg-zinc-50"}`}>{c}</button>
                 ))}
               </div>
@@ -337,11 +391,11 @@ export default function PartsCounter() {
                           </div>
                           <div className="flex-1">
                             <div className="text-xs font-black tracking-widest text-zinc-500 uppercase">SCANNER INPUT</div>
-                            <input value={scanValue} onChange={(e) => setScanValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && scanValue) { const hit = PARTS.find((p) => p.partNo.includes(scanValue)); if (hit) setSelectedPartId(hit.id); setScanValue(""); }}} placeholder="04465-33150  •  press Enter to lookup" className="mt-1 w-full rounded-full bg-zinc-50 border border-zinc-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-900" />
+                            <input value={scanValue} onChange={(e) => setScanValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && scanValue) { const hit = partsStore.find((p) => p.partNumber.includes(scanValue)); if (hit) setSelectedPartNumber(hit.partNumber); setScanValue(""); }}} placeholder="04465-33150  •  press Enter to lookup" className="mt-1 w-full rounded-full bg-zinc-50 border border-zinc-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-900" />
                             <div className="mt-2 flex gap-1.5">
-                              <button onClick={() => { const hit = PARTS.find((p) => p.partNo.includes(scanValue)) ?? PARTS[0]; setSelectedPartId(hit.id); }} className="rounded-full bg-zinc-900 text-white text-xs font-bold px-3 py-1.5">Lookup</button>
+                              <button onClick={() => { const hit = partsStore.find((p) => p.partNumber.includes(scanValue)) ?? partsStore[0]; setSelectedPartNumber(hit.partNumber); }} className="rounded-full bg-zinc-900 text-white text-xs font-bold px-3 py-1.5">Lookup</button>
                               <button onClick={() => setScanValue("04465-33150")} className="rounded-full bg-white border border-zinc-200 text-xs font-bold px-3 py-1.5">Paste demo barcode</button>
-                              <span className="ml-auto text-[11px] text-zinc-500 self-center">Bin A-14-03 • beep ✓</span>
+                              <span className="ml-auto text-[11px] text-zinc-500 self-center">Bin {getBin(selectedPart)} • beep ✓</span>
                             </div>
                           </div>
                         </div>
@@ -357,34 +411,37 @@ export default function PartsCounter() {
             </AnimatePresence>
 
             <div className="grid grid-cols-12 gap-0">
-              {/* Part grid */}
+              {/* Part grid — now driven by Zustand store parts */}
               <div className="col-span-12 lg:col-span-7 p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {filtered.map((p) => {
-                    const isSel = p.id === selectedPartId
+                    const isSel = p.partNumber === selectedPartNumber
                     const margin = Math.round(((priceFor(p, "retail") - p.cost) / priceFor(p, "retail")) * 100)
+                    const bin = getBin(p)
+                    const img = getImage(p)
                     return (
                       <button
-                        key={p.id}
-                        onClick={() => setSelectedPartId(p.id)}
+                        key={p.partNumber}
+                        onClick={() => setSelectedPartNumber(p.partNumber)}
                         className={`text-left rounded-2xl border overflow-hidden transition group ${isSel ? "border-zinc-900 ring-2 ring-zinc-900 bg-white" : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-md"}`}
                       >
                         <div className="h-28 bg-zinc-50 overflow-hidden relative">
-                          <img src={p.image} alt="" className="h-full w-full object-cover group-hover:scale-[1.02] transition duration-300" />
+                          <img src={img} alt="" className="h-full w-full object-cover group-hover:scale-[1.02] transition duration-300" />
                           <span className="absolute left-2 top-2 rounded-full bg-white border border-zinc-200 text-[11px] font-bold px-2 py-0.5 shadow-sm">{p.category}</span>
+                          <span className={`absolute left-2 top-8 rounded-full text-[10px] font-black px-1.5 py-0.5 ${p.matrixCode.startsWith("M") ? (p.matrixCode==="M4" ? "bg-zinc-900 text-white" : "bg-amber-400 text-black") : "bg-white border border-zinc-200 text-zinc-700"}`}>{p.matrixCode}</span>
                           {p.onHand === 0 && <span className="absolute right-2 top-2 rounded-full bg-amber-400 text-black text-[11px] font-black px-2 py-0.5">0 on hand • on order</span>}
                           {p.onHand > 0 && p.onHand <= 3 && <span className="absolute right-2 top-2 rounded-full bg-amber-500 text-white text-[11px] font-bold px-2 py-0.5">Low • {p.onHand} left</span>}
-                          <span className="absolute bottom-2 left-2 rounded-full bg-zinc-900 text-white text-[11px] font-mono font-bold px-2 py-0.5">{p.bin}</span>
+                          <span className="absolute bottom-2 left-2 rounded-full bg-zinc-900 text-white text-[11px] font-mono font-bold px-2 py-0.5">{bin}</span>
                         </div>
                         <div className="p-3">
                           <div className="flex items-start justify-between gap-2">
-                            <div className="font-mono text-xs font-black">{p.partNo}</div>
-                            <span className="text-[11px] font-bold text-zinc-500">{p.brand}</span>
+                            <div className="font-mono text-xs font-black">{p.partNumber}</div>
+                            <span className="text-[11px] font-bold text-zinc-500">{p.make}</span>
                           </div>
-                          <div className="text-sm font-bold leading-tight mt-1 line-clamp-2">{p.desc}</div>
-                          <div className="text-[11px] text-zinc-500 mt-1">{p.vinFit}</div>
+                          <div className="text-sm font-bold leading-tight mt-1 line-clamp-2">{p.description}</div>
+                          <div className="text-[11px] text-zinc-500 mt-1">{getVinFit(p)}</div>
 
-                          {/* Hero pricing row */}
+                          {/* Hero pricing row — matrix vs list remains hero */}
                           <div className="mt-3 rounded-xl bg-zinc-900 text-white p-2.5 flex items-center justify-between">
                             <div>
                               <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">List (Tekion)</div>
@@ -398,43 +455,45 @@ export default function PartsCounter() {
                           </div>
                           <div className="mt-2 flex items-center justify-between">
                             <span className="text-[11px] font-mono bg-zinc-50 border border-zinc-200 px-2 py-1 rounded-full">Cost ${p.cost.toFixed(2)} • {margin}% margin</span>
-                            <span className="text-[11px] font-bold text-emerald-600">+${(priceFor(p, "retail") - p.listPrice).toFixed(2)} vs list</span>
+                            <span className={`text-[11px] font-bold ${priceFor(p,"retail") - p.listPrice >=0 ? "text-emerald-600" : "text-sky-600"}`}>{priceFor(p,"retail") - p.listPrice >=0 ? "+" : ""}${(priceFor(p, "retail") - p.listPrice).toFixed(2)} vs list</span>
                           </div>
                           <div className="mt-2 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
-                            <div className="h-full bg-amber-400" style={{ width: `${margin}%` }} />
+                            <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, Math.max(8, margin))}%` }} />
                           </div>
                         </div>
                       </button>
                     )
                   })}
                 </div>
+                {filtered.length===0 && <div className="py-12 text-center text-sm text-zinc-500 font-medium">No parts match VIN filter • try “All” or clear search</div>}
               </div>
 
-              {/* Detail hero */}
+              {/* Detail hero — live from store */}
               <div className="col-span-12 lg:col-span-5 border-t lg:border-t-0 lg:border-l border-zinc-200 bg-zinc-50 p-4 lg:sticky lg:top-[0px]">
                 <div className="rounded-[20px] border border-zinc-200 bg-white overflow-hidden shadow-sm">
                   <div className="h-40 bg-zinc-50 overflow-hidden relative">
-                    <img src={selectedPart.image} alt="" className="h-full w-full object-cover" />
+                    <img src={getImage(selectedPart)} alt="" className="h-full w-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                     <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
                       <div>
-                        <div className="inline-flex rounded-full bg-white text-zinc-900 text-xs font-mono font-black px-2.5 py-1 shadow">{selectedPart.partNo}</div>
-                        <div className="text-white font-black text-sm leading-none mt-1.5 drop-shadow">{selectedPart.desc}</div>
+                        <div className="inline-flex rounded-full bg-white text-zinc-900 text-xs font-mono font-black px-2.5 py-1 shadow">{selectedPart.partNumber}</div>
+                        <div className="text-white font-black text-sm leading-none mt-1.5 drop-shadow line-clamp-1">{selectedPart.description}</div>
                       </div>
-                      <span className="rounded-full bg-emerald-500 text-white text-xs font-black px-2.5 py-1 shadow">In stock • {selectedPart.onHand}</span>
+                      <span className={`rounded-full text-white text-xs font-black px-2.5 py-1 shadow ${selectedPart.onHand>0 ? "bg-emerald-500" : "bg-amber-500"}`}>{selectedPart.onHand>0 ? `In stock • ${selectedPart.onHand}` : `Out • On order ${selectedPart.onOrder}`}</span>
                     </div>
                   </div>
 
                   <div className="p-4">
                     <div className="flex items-center gap-1.5 text-xs">
                       <Tag className="h-3.5 w-3.5 text-zinc-500" />
-                      <span className="font-semibold">{selectedPart.brand}</span>
+                      <span className="font-semibold">{selectedPart.make}</span>
                       <span className="opacity-30">•</span>
-                      <span className="text-zinc-500">{selectedPart.vinFit}</span>
+                      <span className="text-zinc-500">{getVinFit(selectedPart)}</span>
+                      <span className={`ml-auto inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${selectedPart.matrixCode.startsWith("M") ? "bg-amber-400 text-black" : "bg-zinc-900 text-white"}`}>{selectedPart.matrixCode}</span>
                     </div>
-                    {selectedPart.superseded && <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold px-2.5 py-1"><ArrowsLeftRight className="h-3 w-3" /> Supersession: {selectedPart.superseded}</div>}
+                    {selectedPart.supersededBy && <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold px-2.5 py-1"><ArrowsLeftRight className="h-3 w-3" /> Supersession: {selectedPart.supersededBy}</div>}
 
-                    {/* Price levels */}
+                    {/* Price levels — same matrix, different rule (wholesale Net20 preserved) */}
                     <div className="mt-4">
                       <div className="text-[11px] font-black tracking-widest text-zinc-500 uppercase">Price levels — same matrix, different rule</div>
                       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -474,31 +533,81 @@ export default function PartsCounter() {
                       </div>
                     </div>
 
-                    {/* Qty + add */}
+                    {/* Qty + Sell / Short Sale — wired to Zustand */}
                     <div className="mt-4 flex items-center gap-2">
                       <div className="flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 p-1">
                         <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="h-8 w-8 rounded-full bg-white border border-zinc-200 grid place-items-center hover:bg-zinc-50"><Minus className="h-3.5 w-3.5" /></button>
                         <span className="w-10 text-center font-mono font-black">{qty}</span>
                         <button onClick={() => setQty((q) => q + 1)} className="h-8 w-8 rounded-full bg-zinc-900 text-white grid place-items-center hover:bg-black"><Plus className="h-3.5 w-3.5" weight="bold" /></button>
                       </div>
-                      <button onClick={addToQuote} className="flex-1 rounded-full bg-zinc-900 text-white font-black py-3 flex items-center justify-center gap-1.5 hover:bg-black transition">
-                        <ShoppingCart className="h-4 w-4" weight="bold" /> Add to quote — ${priceFor(selectedPart, priceLevel).toFixed(2)}
-                      </button>
+                      {selectedPart.onHand > 0 ? (
+                        <button onClick={handleSell} className="flex-1 rounded-full bg-zinc-900 text-white font-black py-3 flex items-center justify-center gap-1.5 hover:bg-black transition">
+                          <ShoppingCart className="h-4 w-4" weight="bold" /> Sell — ${priceFor(selectedPart, priceLevel).toFixed(2)}
+                        </button>
+                      ) : (
+                        <button onClick={handleShortSale} className="flex-1 rounded-full bg-amber-500 text-black font-black py-3 flex items-center justify-center gap-1.5 hover:bg-amber-400 transition border-2 border-amber-600">
+                          <Warning className="h-4 w-4" weight="bold" /> Short Sale / Backorder — ${priceFor(selectedPart, priceLevel).toFixed(2)}
+                        </button>
+                      )}
                     </div>
 
+                    {/* Live inventory animation banners */}
+                    <AnimatePresence>
+                      {onHandAnim && (
+                        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center gap-2 text-xs font-bold text-emerald-800">
+                          <CheckCircle className="h-4 w-4 text-emerald-600" weight="fill" /> Sold {qty} • On-hand <span className="font-mono bg-white border border-emerald-200 px-1.5 py-0.5 rounded-full">{onHandAnim.before} → {onHandAnim.after}</span> <span className="ml-auto font-mono text-emerald-700">live decrement ✓</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      {onOrderAnim && (
+                        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center gap-2 text-xs font-bold text-amber-800">
+                          <Clock className="h-4 w-4 text-amber-600" weight="bold" /> Short sale preserved • On-order <span className="font-mono bg-white border border-amber-200 px-1.5 py-0.5 rounded-full">{onOrderAnim.before} → {onOrderAnim.after}</span> <span className="ml-auto">sale intact</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      {saleBanner && (
+                        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="mt-3 rounded-xl bg-zinc-900 text-white px-3 py-2.5 flex items-center justify-between">
+                          <span className="text-xs font-bold flex items-center gap-1.5"><CheckCircle className="h-3.5 w-3.5 text-emerald-400" weight="fill" /> Sale preserved • {saleBanner.partNumber} ×{saleBanner.qty}</span>
+                          <span className="text-xs font-mono font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full">${(saleBanner.price * saleBanner.qty).toFixed(2)}</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      {shortSaleBanner && (
+                        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="mt-3 rounded-xl bg-amber-400 text-black px-3 py-2.5 flex items-center justify-between border-2 border-amber-500">
+                          <span className="text-xs font-black flex items-center gap-1.5"><Warning className="h-3.5 w-3.5" weight="bold" /> Short sale created • {shortSaleBanner.partNumber} ×{shortSaleBanner.qty} reserved</span>
+                          <span className="text-[11px] font-bold bg-zinc-900 text-white px-2 py-0.5 rounded-full">onOrder ↑</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
-                      <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2">
-                        <div className="font-mono font-black">{selectedPart.onHand}</div>
+                      <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2 relative overflow-hidden">
+                        <AnimatePresence mode="wait">
+                          <motion.div key={selectedPart.onHand} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.25 }}>
+                            <div className="font-mono font-black">{selectedPart.onHand}</div>
+                          </motion.div>
+                        </AnimatePresence>
                         <div className="text-zinc-500 font-medium">On hand</div>
                       </div>
-                      <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2">
-                        <div className="font-mono font-black">{selectedPart.onOrder}</div>
+                      <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2 relative">
+                        <AnimatePresence mode="wait">
+                          <motion.div key={selectedPart.onOrder} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+                            <div className="font-mono font-black">{selectedPart.onOrder}</div>
+                          </motion.div>
+                        </AnimatePresence>
                         <div className="text-zinc-500 font-medium">On order</div>
                       </div>
                       <div className="rounded-xl bg-zinc-900 text-white py-2">
-                        <div className="font-mono font-black">{selectedPart.bin}</div>
+                        <div className="font-mono font-black">{getBin(selectedPart)}</div>
                         <div className="text-zinc-400 font-medium">Bin</div>
                       </div>
+                    </div>
+                    <div className="mt-2 text-[11px] font-medium text-zinc-500 flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1"><Stack className="h-3 w-3" /> {selectedPart.make} • {selectedPart.category}</span>
+                      <span className="font-mono bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded-full">Available {selectedPart.onHand - selectedPart.allocated} free</span>
                     </div>
                   </div>
                 </div>
@@ -539,13 +648,14 @@ export default function PartsCounter() {
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {quoteLines.map((l, idx) => {
-                    const p = PARTS.find((x) => x.id === l.partId)!
+                    const p = partsStore.find((x) => x.partNumber === l.partNumber)
+                    if (!p) return null
                     return (
                       <tr key={idx} className="hover:bg-zinc-50/70">
                         <td className="px-4 py-3">
-                          <div className="font-mono text-xs font-black">{p.partNo}</div>
-                          <div className="text-xs font-semibold leading-none">{p.desc}</div>
-                          <div className="text-[11px] text-zinc-500">{p.brand} • {p.bin}</div>
+                          <div className="font-mono text-xs font-black">{p.partNumber}</div>
+                          <div className="text-xs font-semibold leading-none line-clamp-1">{p.description}</div>
+                          <div className="text-[11px] text-zinc-500">{p.make} • {getBin(p)}</div>
                         </td>
                         <td className="px-2 py-3 text-center"><span className="inline-flex rounded-full bg-zinc-900 text-white text-[11px] font-bold px-2 py-0.5 capitalize">{l.priceLevel}</span></td>
                         <td className="px-2 py-3 text-center font-mono font-bold">{l.qty}</td>
@@ -595,48 +705,60 @@ export default function PartsCounter() {
               <div className="p-4 space-y-3">
                 <div className="rounded-2xl bg-white border border-amber-200 p-4">
                   <div className="flex gap-3">
-                    <img src={shortSalePart.image} alt="" className="h-14 w-14 rounded-xl object-cover border border-zinc-200 shrink-0" />
+                    <img src={getImage(shortSalePart)} alt="" className="h-14 w-14 rounded-xl object-cover border border-zinc-200 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-xs font-black">{shortSalePart.partNo} • {shortSalePart.desc}</div>
-                      <div className="text-xs text-zinc-600 mt-1">RO 88331 requests 2 • On hand 0 • On order 8 (ETA 2d)</div>
+                      <div className="font-mono text-xs font-black">{shortSalePart.partNumber} • {shortSalePart.description}</div>
+                      <div className="text-xs text-zinc-600 mt-1">RO 88331 requests {qty} • On hand {shortSalePart.onHand} • On order {shortSalePart.onOrder} (ETA 2d)</div>
                       <div className="mt-2 flex items-center gap-1.5">
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 text-black text-xs font-black px-2.5 py-1"><Clock className="h-3 w-3" weight="bold" /> Short-sale created</span>
-                        <span className="text-[11px] font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-full">Qty 2 reserved</span>
+                        <span className="text-[11px] font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-full">Qty {shortSaleBanner?.qty ?? qty} reserved</span>
                       </div>
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-xl bg-zinc-900 text-white p-2.5">
                       <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Available</div>
-                      <div className="text-sm font-black">0</div>
+                      <div className="text-sm font-black">{shortSalePart.onHand}</div>
                       <div className="text-[11px] text-zinc-400">Not oversold</div>
                     </div>
                     <div className="rounded-xl bg-amber-400 text-black p-2.5 border-2 border-amber-500">
                       <div className="text-[10px] font-black tracking-widest uppercase">Committed</div>
-                      <div className="text-sm font-black">2</div>
+                      <div className="text-sm font-black">{shortSaleBanner?.qty ?? qty}</div>
                       <div className="text-[11px] font-bold">Preserved ↑</div>
                     </div>
                     <div className="rounded-xl bg-white border border-zinc-200 p-2.5">
                       <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">On order</div>
-                      <div className="text-sm font-black">8</div>
+                      <div className="text-sm font-black"><AnimatePresence mode="wait"><motion.span key={shortSalePart.onOrder} initial={{ scale: 0.9 }} animate={{ scale: 1 }}>{shortSalePart.onOrder}</motion.span></AnimatePresence></div>
                       <div className="text-[11px] text-zinc-500">Due Fri</div>
                     </div>
                   </div>
+                  <AnimatePresence>
+                    {shortSaleBanner && (
+                      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 p-2.5 flex items-center gap-2 text-xs font-bold text-emerald-800">
+                        <CheckCircle className="h-4 w-4 text-emerald-600" weight="fill" /> Preserved sale banner • {shortSaleBanner.partNumber} ×{shortSaleBanner.qty} — allocated on receipt, no double-count
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   <div className="mt-3 rounded-xl bg-zinc-900 text-white p-3 flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-emerald-500 grid place-items-center shrink-0"><Truck className="h-4 w-4" weight="bold" /></div>
                     <div className="text-xs leading-relaxed">
-                      <span className="font-black">On receipt:</span> 2 auto-allocated to RO 88331 • remaining 6 to stock • sale stays intact — no double-count, no lost RO.
+                      <span className="font-black">On receipt:</span> {shortSaleBanner?.qty ?? qty} auto-allocated to RO 88331 • remaining {(shortSalePart.onOrder) - (shortSaleBanner?.qty ?? 0)} to stock • sale stays intact — no double-count, no lost RO.
                     </div>
                   </div>
                   <div className="mt-2 flex gap-2 text-[11px] font-bold">
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1"><CheckCircle className="h-3 w-3" weight="fill" /> Tekion bug fixed</span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-white border border-zinc-200 px-2.5 py-1"><ShieldCheck className="h-3 w-3" /> Allocation audit logged</span>
                   </div>
+                  {selectedPart.onHand===0 && (
+                    <button onClick={handleShortSale} className="mt-3 w-full rounded-full bg-zinc-900 text-white font-black py-2.5 flex items-center justify-center gap-1.5 hover:bg-black">
+                      <Warning className="h-4 w-4" weight="bold" /> Create Short Sale for {selectedPart.partNumber} ×{qty} → onOrder {selectedPart.onOrder} → {selectedPart.onOrder + qty}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Stock order widget — working day-one */}
+            {/* Stock order widget — working day-one — live from store */}
             <div className="rounded-[20px] border border-zinc-200 bg-white shadow-sm overflow-hidden flex-1">
               <div className="px-5 py-4 border-b border-zinc-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -649,17 +771,13 @@ export default function PartsCounter() {
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-xs font-black px-2.5 py-1"><Timer className="h-3.5 w-3.5" /> Auto</span>
               </div>
               <div className="divide-y divide-zinc-100">
-                {[
-                  { part: PARTS[0], min: 4, max: 8, onHand: 6, suggested: 2 },
-                  { part: PARTS[3], min: 4, max: 6, onHand: 3, suggested: 3 },
-                  { part: PARTS[4], min: 2, max: 4, onHand: 0, suggested: 4 },
-                ].map((r) => (
-                  <div key={r.part.id} className="px-4 py-3 flex items-center gap-3">
-                    <img src={r.part.image} alt="" className="h-10 w-10 rounded-lg object-cover border border-zinc-200" />
+                {stockOrderRows.map((r) => (
+                  <div key={r.part.partNumber} className="px-4 py-3 flex items-center gap-3">
+                    <img src={getImage(r.part)} alt="" className="h-10 w-10 rounded-lg object-cover border border-zinc-200" />
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-mono font-black">{r.part.partNo}</div>
-                      <div className="text-xs font-semibold truncate">{r.part.desc}</div>
-                      <div className="text-[11px] text-zinc-500">Min {r.min} • Max {r.max} • On hand {r.onHand}</div>
+                      <div className="text-xs font-mono font-black">{r.part.partNumber}</div>
+                      <div className="text-xs font-semibold truncate">{r.part.description}</div>
+                      <div className="text-[11px] text-zinc-500">Min {r.min} • Max {r.max} • On hand {r.part.onHand} • {r.part.make}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-black">+{r.suggested}</div>
@@ -677,7 +795,7 @@ export default function PartsCounter() {
             </div>
           </div>
 
-          {/* Wholesale + Cross-rooftop */}
+          {/* Wholesale + Cross-rooftop — Net20 logic preserved */}
           <div className="col-span-12 grid grid-cols-12 gap-4">
             <div className="col-span-12 lg:col-span-7 rounded-[20px] border border-zinc-200 bg-white shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-zinc-200 flex items-center justify-between">
@@ -713,7 +831,7 @@ export default function PartsCounter() {
                         <div className="h-8 w-8 rounded-lg bg-zinc-50 border border-zinc-200 grid place-items-center"><Receipt className="h-4 w-4 text-zinc-600" /></div>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-mono font-black">{row.inv} <span className="text-zinc-400 font-normal">• {row.date}</span></div>
-                          <div className="text-xs text-zinc-500">ACME Body • 6 lines • Matrix wholesale</div>
+                          <div className="text-xs text-zinc-500">ACME Body • 6 lines • Matrix wholesale @ {priceFor(selectedPart,"wholesale").toFixed(2)}</div>
                         </div>
                         <div className="text-right">
                           <div className="font-mono font-black">${row.total.toFixed(2)}</div>
@@ -729,7 +847,7 @@ export default function PartsCounter() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-                  <Phone className="h-3.5 w-3.5" /> Wholesale price is matrix-derived — no manual discount sheet.
+                  <Phone className="h-3.5 w-3.5" /> Wholesale price is matrix-derived — no manual discount sheet. Net 20 terms auto-enforced.
                   <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 font-bold"><CheckCircle className="h-3 w-3" weight="fill" /> Statement auto-emails 1st of month</span>
                 </div>
               </div>
@@ -748,12 +866,12 @@ export default function PartsCounter() {
               <div className="p-4 space-y-3">
                 <div className="rounded-2xl bg-zinc-900 text-white p-4">
                   <div className="text-xs font-black tracking-widest text-zinc-400 uppercase">Selected part availability</div>
-                  <div className="text-sm font-mono font-black mt-1">{selectedPart.partNo} • {selectedPart.desc}</div>
+                  <div className="text-sm font-mono font-black mt-1">{selectedPart.partNumber} • {selectedPart.description.slice(0,48)}</div>
                   <div className="mt-3 space-y-2">
                     {[
-                      { store: "South Cobb (you)", qty: selectedPart.onHand, eta: "Now • Bin " + selectedPart.bin, color: "bg-emerald-500" },
-                      { store: "North Fulton Toyota", qty: 4, eta: "Transfer 1h • driver en route", color: "bg-sky-500" },
-                      { store: "Marietta Toyota", qty: 0, eta: "0 • On order 6", color: "bg-zinc-700" },
+                      { store: "South Cobb (you)", qty: selectedPart.onHand, eta: `Now • Bin ${getBin(selectedPart)}`, color: "bg-emerald-500" },
+                      { store: "North Fulton Toyota", qty: Math.max(0, 4 + (selectedPart.onOrder % 3)), eta: "Transfer 1h • driver en route", color: "bg-sky-500" },
+                      { store: "Marietta Toyota", qty: shortSalePart.onHand, eta: `0 • On order ${shortSalePart.onOrder}`, color: "bg-zinc-700" },
                       { store: "PDC Atlanta", qty: 22, eta: "Stock order tomorrow 8am", color: "bg-amber-400 text-black" },
                     ].map((s) => (
                       <div key={s.store} className="flex items-center gap-3 rounded-xl bg-white/10 border border-white/10 px-3 py-2.5">
@@ -777,7 +895,7 @@ export default function PartsCounter() {
                       <div className="text-zinc-500 font-medium">Rooftops</div>
                     </div>
                     <div className="rounded-xl bg-zinc-900 text-white py-2">
-                      <div className="font-mono font-black text-sm">10</div>
+                      <div className="font-mono font-black text-sm">{selectedPart.onHand + 4 + shortSalePart.onHand + 22}</div>
                       <div className="text-zinc-400 font-medium">Total on hand</div>
                     </div>
                     <div className="rounded-xl bg-emerald-50 border border-emerald-200 py-2">
@@ -794,10 +912,10 @@ export default function PartsCounter() {
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-medium text-zinc-500">
           <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 text-white font-bold px-2.5 py-1">E8 Catalog + VIN</span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1">F7 Matrix pricing</span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1">F7 Matrix pricing • {selectedPart.matrixCode} live • {partsStore.length} SKUs</span>
           <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1">F16 Transfers & backorder</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 text-black font-black px-2.5 py-1">Hero: cost × matrix, not list</span>
-          <span className="ml-auto hidden sm:inline">AutoCore ERP • Parts Counter Demo • Tailwind + Motion + Phosphor • bento</span>
+          <span className="ml-auto hidden sm:inline">AutoCore ERP • Parts Counter Demo • Zustand live • Tailwind + Motion + Phosphor • bento</span>
         </div>
       </div>
     </div>
