@@ -36,6 +36,16 @@ import {
   PenNib,
   Phone,
   ChatCircle,
+  Van,
+  GasPump,
+  Tire,
+  ClipboardText,
+  FileText,
+  ShieldCheck,
+  House,
+  Microphone,
+  Waveform,
+  RoadHorizon,
 } from "@phosphor-icons/react"
 import { useStore } from "@/lib/store"
 
@@ -154,6 +164,21 @@ export default function ServiceLane() {
   const acceptCopilot = useStore((s) => s.acceptCopilot)
   const dismissCopilot = useStore((s) => s.dismissCopilot)
   const generateCopilotForRO = useStore((s) => s.generateCopilotForRO)
+  // E14-T07 P2 Voice-to-inspection-field — Technician-AI live transcript
+  const voiceTranscripts = useStore((s) => s.voiceTranscripts)
+  const addVoiceTranscript = useStore((s) => s.addVoiceTranscript)
+  const applyVoiceTranscript = useStore((s) => s.applyVoiceTranscript)
+  const dismissVoiceTranscript = useStore((s) => s.dismissVoiceTranscript)
+  // E7-T11 Loaner & Shuttle + E8-T10 Tire Hub — live store
+  const loanerFleet = useStore((s) => s.loanerFleet)
+  const shuttleRides = useStore((s) => s.shuttleRides)
+  const tireSets = useStore((s) => s.tireSets)
+  const assignLoanerToRO = useStore((s) => s.assignLoanerToRO)
+  const updateLoanerAgreement = useStore((s) => s.updateLoanerAgreement)
+  const returnLoaner = useStore((s) => s.returnLoaner)
+  const dispatchShuttle = useStore((s) => s.dispatchShuttle)
+  const completeShuttle = useStore((s) => s.completeShuttle)
+  const addTireSetToRO = useStore((s) => s.addTireSetToRO)
 
   const [selectedRoId, setSelectedRoId] = useState<string>(ros[0]?.id ?? "RO-1001")
   const [filter, setFilter] = useState<string>("all")
@@ -161,6 +186,18 @@ export default function ServiceLane() {
   const [showPayLink, setShowPayLink] = useState(false)
   const [sentLink, setSentLink] = useState(false)
   const [search, setSearch] = useState("")
+  // E14-T07 P2 Voice-to-inspection-field — hold to record live
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingPulse, setRecordingPulse] = useState(false)
+  const [lastVoiceId, setLastVoiceId] = useState<string | null>(null)
+  const lastVoice = useMemo(() => voiceTranscripts.find(v=> v.id===lastVoiceId) ?? voiceTranscripts.filter(v=> v.roId===selectedRoId).slice(-1)[0] ?? null, [voiceTranscripts, lastVoiceId, selectedRoId])
+  // E7-T11 agreement capture + E8-T10 tire hub local UI
+  const [selectedLoanerId, setSelectedLoanerId] = useState<string>(loanerFleet[0]?.id ?? "LOAN-01")
+  const [agreementFuel, setAgreementFuel] = useState<string>("Full")
+  const [agreementDamage, setAgreementDamage] = useState<string>("")
+  const [showManifestFor, setShowManifestFor] = useState<string | null>(null)
+  const [tireVin, setTireVin] = useState<string>("2T3B1RFVXNW147882")
+  const [tireAddedFlash, setTireAddedFlash] = useState<string | null>(null)
 
   // keep selected RO valid when store changes (e.g., after Create RO)
   const selectedRO = useMemo(() => ros.find((r) => r.id === selectedRoId) ?? ros[0] ?? null, [ros, selectedRoId])
@@ -242,6 +279,32 @@ export default function ServiceLane() {
 
   const handleMpiDecision = (roId: string, index: number, approve: boolean) => {
     approveMpiItem(roId, index, approve)
+  }
+
+  // E14-T07 P2 — Hold to record → mock transcript → store pre-fill → MPI
+  const startVoice = () => {
+    if (!selectedRO) return
+    setIsRecording(true)
+    setRecordingPulse(true)
+  }
+  const endVoice = () => {
+    if (!isRecording || !selectedRO) {
+      setIsRecording(false)
+      setRecordingPulse(false)
+      return
+    }
+    setIsRecording(false)
+    setRecordingPulse(false)
+    const mock = "Brake pads 4mm, recommend replace, labor 1.2h"
+    const entry = addVoiceTranscript(mock, selectedRO.id, "mpi_video")
+    setLastVoiceId(entry.id)
+  }
+  const handleApplyVoice = () => {
+    if (!lastVoice) return
+    const ok = applyVoiceTranscript(lastVoice.id)
+    if (ok) {
+      // flash added — selection already updated via store
+    }
   }
 
   const capacityPct = Math.min(1, totalFlagged / totalCapacityHrs)
@@ -526,12 +589,15 @@ export default function ServiceLane() {
                           <meta.icon className="h-3 w-3" weight="bold" /> {meta.label}
                         </span>
                         {r.type !== "customer_pay" && <span className={`text-[10px] font-black tracking-widest px-1.5 py-0.5 rounded ${r.type === "warranty" ? "bg-amber-500 text-black" : r.type === "recall" ? "bg-violet-500 text-white" : "bg-sky-500 text-white"}`}>{r.type.toUpperCase()}</span>}
+                        {(r as unknown as { loanerVehicleId?: string }).loanerVehicleId && <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 text-white text-[10px] font-black px-1.5 py-0.5"><Car className="h-3 w-3" weight="bold" /> {(r as unknown as { loanerVehicleId?: string }).loanerVehicleId} • {loanerFleet.find(l=> l.id===(r as unknown as { loanerVehicleId?: string }).loanerVehicleId)?.model.split(" ").slice(1,3).join(" ") ?? "loaner"}</span>}
+                        {(r.mpiItems as unknown as { id: string }[]).some(m=> m.id.startsWith("TIRE-")) && <span className="inline-flex items-center gap-1 rounded-full bg-white text-black text-[10px] font-black px-1.5 py-0.5"><Tire className="h-3 w-3" weight="bold" /> Tires</span>}
                       </div>
                       <div className="text-sm font-semibold mt-1">{r.customerName} <span className="text-zinc-500 font-normal">• {vehicleLabel(r.vehicle)} • {r.vehicle.mileage.toLocaleString()} mi</span></div>
                       <div className="text-xs text-zinc-400 mt-1 line-clamp-1">{r.concern} • Adv: {r.advisor} {r.technicianName ? `• Tech: ${r.technicianName}` : "• Unassigned"}</div>
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
                         <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-white/10 border border-white/10 px-1.5 py-0.5 rounded"><Clock className="h-3 w-3" /> Promise {r.promisedAt ? fmtTime(r.promisedAt) : "—"}</span>
                         <span className="text-[11px] text-zinc-500">{flagged}h flagged</span>
+                        {(r as unknown as { loanerVehicleId?: string }).loanerVehicleId && <span className="inline-flex items-center gap-1 rounded-full bg-white text-black text-[11px] font-bold px-2 py-0.5"><ClipboardText className="h-3 w-3" /> Manifest: {(r as unknown as { loanerVehicleId?: string }).loanerVehicleId} • {loanerFleet.find(l=> l.id===(r as unknown as { loanerVehicleId?: string }).loanerVehicleId)?.fuel ?? "Full"}</span>}
                         <span className="ml-auto text-[11px] font-medium flex items-center gap-1"><span className="h-1.5 w-8 rounded-full bg-white/10 overflow-hidden inline-block"><span className="block h-full bg-emerald-500" style={{ width: `${mpiTotal ? (mpiDone / mpiTotal) * 100 : 0}%` }} /></span> MPI {mpiDone}/{mpiTotal}</span>
                       </div>
                     </div>
@@ -641,6 +707,402 @@ export default function ServiceLane() {
               <span className="opacity-20">•</span>
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-500" /> Skill match boosts first-time fix • {avgEfficiency}% avg eff</span>
               <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-white text-black font-bold px-2.5 py-1"><Sparkle className="h-3 w-3" /> Auto-dispatch enabled</span>
+            </div>
+          </motion.div>
+
+          {/* ── E7-T11 Loaner Fleet • Shuttle + Agreement — Live ── */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.11 }} className="col-span-12 lg:col-span-8 rounded-[20px] border border-white/[0.06] bg-zinc-900/60 backdrop-blur overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-xl bg-zinc-100 text-zinc-900 grid place-items-center"><Car className="h-4 w-4" weight="bold" /></div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold tracking-tight">Loaner Fleet</span>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white text-black text-[10px] font-bold px-2 py-0.5 tracking-widest">E7-T11</span>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-500 text-black text-[11px] font-black px-2 py-1">{loanerFleet.filter(l=>l.status==="available").length} available • 6 total</span>
+                  </div>
+                  <div className="text-xs text-zinc-400">Fleet tracking • agreements • fuel/damage capture • shuttle queue</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-white/[0.06] border border-white/10 px-2.5 py-1 text-[11px] font-medium"><Van className="h-3.5 w-3.5 text-zinc-300" /> Shuttle • {shuttleRides.filter(s=>s.status!=="completed").length} active</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 text-white text-[11px] font-black px-2.5 py-1"><ShieldCheck className="h-3.5 w-3.5" weight="bold" /> Manifest live</span>
+              </div>
+            </div>
+
+            {/* Loaner grid — 6 loaners */}
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {loanerFleet.map((l) => {
+                const isSelected = selectedLoanerId === l.id
+                const statusMeta = l.status === "available" ? { label: "Available", color: "bg-emerald-500 text-black" } : l.status === "on_loan" ? { label: "On loan", color: "bg-sky-500 text-white" } : { label: "Maintenance", color: "bg-amber-500 text-black" }
+                const isAvailable = l.status === "available"
+                const isOnLoan = l.status === "on_loan"
+                const linkedRO = l.roId ? ros.find(r=> r.id===l.roId) : null
+                const selectedROHasLoaner = (selectedRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId === l.id
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => {
+                      setSelectedLoanerId(l.id)
+                      setAgreementFuel(l.fuel)
+                      setAgreementDamage(l.damage ?? "")
+                    }}
+                    className={`text-left rounded-2xl border p-3 flex flex-col gap-2 transition relative overflow-hidden ${isSelected ? "border-white bg-white text-zinc-900 shadow-lg" : "border-white/10 bg-black/30 hover:border-white/20 hover:bg-zinc-800/60 text-zinc-100"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black tracking-widest ${isSelected ? "bg-zinc-900 text-white" : statusMeta.color}`}>{statusMeta.label}</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isSelected ? "bg-zinc-900 text-white" : "bg-white/10 border border-white/10"}`}>{l.id}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`h-8 w-8 rounded-xl grid place-items-center shrink-0 ${isSelected ? "bg-zinc-900 text-white" : "bg-white/10 border border-white/10"}`}><Car className="h-4 w-4" weight="bold" /></div>
+                      <div className="min-w-0">
+                        <div className={`text-xs font-black leading-none truncate ${isSelected ? "text-zinc-900" : "text-white"}`}>{l.model}</div>
+                        <div className={`text-[11px] font-mono ${isSelected ? "text-zinc-500" : "text-zinc-400"}`}>{l.plate} • Odo {l.odoOut?.toLocaleString() ?? "—"} mi</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${isSelected ? "bg-zinc-100 border border-zinc-200 text-zinc-700" : "bg-white/10 border border-white/10 text-zinc-300"}`}><GasPump className="h-3 w-3" /> {l.fuel}</span>
+                      {l.damage ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold border ${isSelected ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-amber-500/15 border-amber-500/20 text-amber-300"}`}><WarningCircle className="h-3 w-3" weight="bold" /> Damage</span>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${isSelected ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-emerald-500/15 border border-emerald-500/20 text-emerald-300"}`}><CheckCircle className="h-3 w-3" weight="bold" /> Clean</span>
+                      )}
+                      {isOnLoan && l.roId && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${isSelected ? "bg-sky-100 border border-sky-200 text-sky-800" : "bg-sky-500 text-white"}`}>{l.roId}</span>}
+                    </div>
+                    {/* Assign button — updates RO loanerVehicleId and shows manifest */}
+                    {isAvailable ? (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (!selectedRO) return
+                          assignLoanerToRO(l.id, selectedRO.id)
+                          setShowManifestFor(l.id)
+                        }}
+                        className={`mt-1 inline-flex items-center justify-center gap-1.5 rounded-full text-xs font-black px-3 py-2 border transition ${selectedROHasLoaner ? "bg-emerald-500 border-emerald-500 text-white" : isSelected ? "bg-zinc-900 text-white border-zinc-900 hover:bg-black" : "bg-white text-black border-white hover:bg-zinc-100"}`}
+                      >
+                        {selectedROHasLoaner ? <><CheckCircle className="h-3.5 w-3.5" weight="fill" /> Assigned to {selectedRO?.roNumber}</> : <><ArrowRight className="h-3.5 w-3.5" /> Assign to {selectedRO?.roNumber ?? "RO"}</>}
+                      </span>
+                    ) : isOnLoan ? (
+                      <span className={`mt-1 inline-flex items-center gap-1 rounded-full text-[11px] font-bold px-3 py-1.5 border ${isSelected ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-sky-500/15 border-sky-500/20 text-sky-300"}`}>
+                        <ClipboardText className="h-3 w-3" /> On loan {linkedRO ? `• ${linkedRO.customerName}` : ""} • manifest ↓
+                      </span>
+                    ) : (
+                      <span className={`mt-1 inline-flex items-center gap-1 rounded-full text-[11px] font-bold px-3 py-1.5 border ${isSelected ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-amber-500/15 border-amber-500/20 text-amber-300"}`}>
+                        <Wrench className="h-3 w-3" /> Blocked — maintenance
+                      </span>
+                    )}
+                    {selectedROHasLoaner && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isSelected ? "bg-emerald-600 text-white" : "bg-emerald-500 text-black"}`}>● Manifest live • fuel {l.fuel}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Agreement mock — fuel/damage capture */}
+            <div className="mx-4 mb-3 rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-xl bg-white text-black grid place-items-center"><ClipboardText className="h-3.5 w-3.5" weight="bold" /></div>
+                  <div>
+                    <div className="text-xs font-black">Agreement • fuel / damage capture</div>
+                    <div className="text-[11px] text-zinc-400">Mock agreement for {loanerFleet.find(l=>l.id===selectedLoanerId)?.model ?? "loaner"} • {selectedLoanerId} • RO {selectedRO?.roNumber ?? "—"}</div>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white text-black text-[11px] font-bold px-2.5 py-1"><FileText className="h-3 w-3" /> LOAN-AGMT-{selectedLoanerId}</span>
+              </div>
+              <div className="p-4 grid grid-cols-12 gap-3">
+                <div className="col-span-12 lg:col-span-5 space-y-3">
+                  <div>
+                    <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Selected loaner</div>
+                    <div className="mt-1 flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2">
+                      <Car className="h-4 w-4" weight="bold" />
+                      <span className="text-sm font-black">{loanerFleet.find(l=>l.id===selectedLoanerId)?.model ?? "—"}</span>
+                      <span className="ml-auto text-xs font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-full">{selectedLoanerId}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {loanerFleet.filter(l=> l.status==="available").slice(0,3).map(l=> (
+                        <button key={l.id} onClick={()=> { setSelectedLoanerId(l.id); setAgreementFuel(l.fuel); setAgreementDamage(l.damage ?? "")}} className={`rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${selectedLoanerId===l.id ? "bg-white text-black border-white" : "bg-white/10 border-white/10 text-zinc-300 hover:bg-white/15"}`}>{l.id} • {l.model.split(" ")[1]}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="rounded-xl bg-white/[0.06] border border-white/10 p-2.5">
+                      <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase flex items-center gap-1"><GasPump className="h-3 w-3" /> Fuel out</div>
+                      <select value={agreementFuel} onChange={(e)=> setAgreementFuel(e.target.value)} className="mt-1 w-full rounded-full bg-white text-black text-sm font-bold px-2.5 py-1.5 focus:outline-none">
+                        <option>Full</option><option>7/8</option><option>3/4</option><option>1/2</option><option>1/4</option><option>Empty</option>
+                      </select>
+                    </label>
+                    <label className="rounded-xl bg-white/[0.06] border border-white/10 p-2.5">
+                      <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Plate • Odo out</div>
+                      <div className="mt-1 rounded-full bg-white text-black text-sm font-mono font-bold px-3 py-1.5">{loanerFleet.find(l=>l.id===selectedLoanerId)?.plate ?? "SOV-101"} • {(loanerFleet.find(l=>l.id===selectedLoanerId)?.odoOut ?? 0).toLocaleString()} mi</div>
+                    </label>
+                  </div>
+                  <label className="block rounded-xl bg-white/[0.06] border border-white/10 p-2.5">
+                    <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase flex items-center gap-1"><WarningCircle className="h-3 w-3" /> Damage capture</div>
+                    <textarea value={agreementDamage} onChange={(e)=> setAgreementDamage(e.target.value)} placeholder="Walk-around notes • front bumper, wheels, interior • photo logged" className="mt-1 w-full rounded-xl bg-white text-zinc-900 text-sm p-2.5 min-h-[64px] placeholder:text-zinc-400 focus:outline-none" />
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500"><Camera className="h-3 w-3" /> Photos required if damage • logged to agreement</div>
+                  </label>
+                  <div className="flex gap-2">
+                    <button onClick={()=> updateLoanerAgreement(selectedLoanerId, agreementFuel, agreementDamage || null)} className="flex-1 rounded-full bg-white text-black font-bold text-sm py-2.5 hover:bg-zinc-100 transition">Save capture</button>
+                    <button
+                      onClick={() => {
+                        const l = loanerFleet.find(x=> x.id===selectedLoanerId)
+                        if (!l || l.status !== "on_loan") return
+                        returnLoaner(selectedLoanerId, agreementFuel, agreementDamage || null)
+                      }}
+                      className="rounded-full bg-amber-500 text-black font-black text-sm px-4 py-2.5 hover:bg-amber-400 transition disabled:opacity-40"
+                      disabled={loanerFleet.find(l=>l.id===selectedLoanerId)?.status !== "on_loan"}
+                    >
+                      Return • check-in
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-zinc-500 leading-relaxed">Agreement mock • fuel/damage captured at out & in • signature on file • RO link creates manifest • return triggers inspection</div>
+                </div>
+                <div className="col-span-12 lg:col-span-7 flex flex-col gap-3">
+                  {/* Manifest preview */}
+                  <div className="rounded-2xl bg-white text-zinc-900 overflow-hidden border border-zinc-200">
+                    <div className="px-4 py-3 bg-zinc-900 text-white flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" weight="bold" />
+                        <span className="text-xs font-black tracking-widest uppercase">Loaner Manifest</span>
+                        <span className="hidden sm:inline-flex rounded-full bg-white text-black text-[10px] font-bold px-2 py-0.5">LOAN-MANIFEST</span>
+                      </div>
+                      <span className="text-[11px] font-mono bg-white/10 border border-white/20 px-2 py-0.5 rounded-full">{selectedLoanerId} → {selectedRO?.roNumber ?? "RO-—"}</span>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {(() => {
+                        const sel = loanerFleet.find(l=>l.id===selectedLoanerId)
+                        const manifestRO = sel?.roId ? ros.find(r=> r.id===sel.roId) : selectedRO
+                        const hasManifest = Boolean(sel?.roId || (selectedRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId)
+                        return (
+                          <>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3">
+                                <div className="text-[11px] font-bold tracking-widest text-zinc-500 uppercase">Loaner</div>
+                                <div className="font-black">{sel?.model ?? "—"} • {sel?.id}</div>
+                                <div className="text-zinc-500">{sel?.plate} • {sel?.fuel} • {sel?.damage ? "Damage logged" : "No damage"}</div>
+                              </div>
+                              <div className="rounded-xl bg-zinc-900 text-white p-3">
+                                <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Customer • RO</div>
+                                <div className="font-bold">{manifestRO?.customerName ?? "—"}</div>
+                                <div className="text-zinc-400 text-[11px]">{manifestRO?.roNumber ?? "—"} • {(manifestRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId ? `loaner ${(manifestRO as unknown as { loanerVehicleId?: string }).loanerVehicleId}` : sel?.roId ? `loaner ${sel.id}` : "no loaner yet"} • Due {manifestRO?.promisedAt ? fmtTime(manifestRO.promisedAt) : "—"}</div>
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-200 p-3 grid grid-cols-3 gap-2 text-center">
+                              <div><div className="text-[11px] font-bold tracking-widest text-zinc-500 uppercase">Fuel out</div><div className="font-mono font-black">{sel?.fuel ?? agreementFuel}</div></div>
+                              <div><div className="text-[11px] font-bold tracking-widest text-zinc-500 uppercase">Fuel in</div><div className="font-mono font-black">{sel?.status==="on_loan" ? sel.fuel : "—"}</div></div>
+                              <div><div className="text-[11px] font-bold tracking-widest text-zinc-500 uppercase">Mileage</div><div className="font-mono font-black">{sel?.odoOut?.toLocaleString() ?? "—"} → {sel?.odoIn ? sel.odoIn.toLocaleString() : "—"}</div></div>
+                            </div>
+                            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                              <div className="text-xs font-black flex items-center gap-1"><WarningCircle className="h-3.5 w-3.5 text-amber-600" weight="bold" /> Damage on agreement</div>
+                              <div className="text-xs text-zinc-700 mt-1">{sel?.damage || agreementDamage || "No damage reported • walk-around clean • photos on file"}</div>
+                            </div>
+                            {hasManifest ? (
+                              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
+                                <CheckCircle className="h-4 w-4 text-emerald-600" weight="fill" />
+                                <span className="text-xs font-bold text-emerald-800">Manifest live • RO {(manifestRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId ? manifestRO?.roNumber : sel?.roId ? sel.roId : selectedRO?.roNumber} now shows loaner {hasManifest ? (sel?.id ?? (selectedRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId) : ""} • printable</span>
+                                <button onClick={()=> setShowManifestFor(showManifestFor ? null : (sel?.id ?? null))} className="ml-auto rounded-full bg-zinc-900 text-white text-[11px] font-bold px-3 py-1.5">{showManifestFor ? "Hide" : "View"} manifest</button>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-3 text-center">
+                                <div className="text-xs font-bold text-zinc-600">No manifest yet — assign an available loaner to {selectedRO?.roNumber ?? "RO"} to generate</div>
+                                <button onClick={()=> { const avail = loanerFleet.find(l=> l.status==="available"); if(avail && selectedRO) { assignLoanerToRO(avail.id, selectedRO.id); setSelectedLoanerId(avail.id); setShowManifestFor(avail.id) } }} className="mt-2 rounded-full bg-zinc-900 text-white text-xs font-bold px-3 py-1.5">Quick assign available → {selectedRO?.roNumber}</button>
+                              </div>
+                            )}
+                            <AnimatePresence>
+                              {showManifestFor && (
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                  <div className="rounded-xl border border-zinc-200 bg-zinc-900 text-white p-3 font-mono text-[11px] leading-relaxed">
+                                    <div className="font-black tracking-widest">LOANER AGREEMENT MANIFEST</div>
+                                    <div>Loaner: {sel?.id} • {sel?.model} • {sel?.plate} • VIN {sel?.id}-VIN</div>
+                                    <div>RO: {manifestRO?.roNumber} • Customer: {manifestRO?.customerName} • Advisor: {manifestRO?.advisor}</div>
+                                    <div>Vehicle: {(manifestRO?.vehicle as unknown as { year: number; make: string; model: string }) ? `${(manifestRO?.vehicle as unknown as { year: number; make: string; model: string }).year} ${(manifestRO?.vehicle as unknown as { year: number; make: string; model: string }).make} ${(manifestRO?.vehicle as unknown as { year: number; make: string; model: string }).model}` : "—"} • Mileage {(manifestRO?.vehicle as unknown as { mileage: number })?.mileage?.toLocaleString() ?? "—"}</div>
+                                    <div>Fuel: {sel?.fuel} • Damage: {sel?.damage ?? "none"} • Odo out {sel?.odoOut} • Odo in {sel?.odoIn ?? "—"}</div>
+                                    <div className="mt-2 h-px bg-white/10" />
+                                    <div className="mt-2 flex items-center gap-2"><span className="rounded bg-white text-black px-1.5 py-0.5 font-black">SIGN</span> Customer ___________ • Advisor ___________ • {new Date().toLocaleString()}</div>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                  {/* RO loaner badge live */}
+                  <div className="rounded-2xl bg-zinc-900 border border-white/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5"><ClipboardText className="h-3.5 w-3.5" /> RO loaner link</span>
+                      <span className="text-[11px] font-mono bg-white text-black px-2 py-0.5 rounded-full">{selectedRO?.roNumber} { (selectedRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId ? `• ${ (selectedRO as unknown as { loanerVehicleId?: string }).loanerVehicleId }` : "• no loaner"}</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-white text-zinc-900 py-2 border border-zinc-200"><div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Active loans</div><div className="font-black">{loanerFleet.filter(l=> l.status==="on_loan").length}/6</div></div>
+                      <div className="rounded-xl bg-white/10 border border-white/10 py-2"><div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Avail</div><div className="font-black text-white">{loanerFleet.filter(l=> l.status==="available").length}</div></div>
+                      <div className="rounded-xl bg-amber-500 text-black py-2"><div className="text-[10px] font-black tracking-widest uppercase">Maint</div><div className="font-black">{loanerFleet.filter(l=> l.status==="maintenance").length}</div></div>
+                    </div>
+                    {(selectedRO as unknown as { loanerVehicleId?: string })?.loanerVehicleId && (
+                      <div className="mt-2 rounded-xl bg-emerald-500 text-black px-3 py-2 flex items-center gap-2 text-xs font-bold"> <CheckCircle className="h-4 w-4" weight="fill" /> Manifest shows on RO • {(selectedRO as unknown as { loanerVehicleId?: string }).loanerVehicleId} • {loanerFleet.find(l=> l.id === (selectedRO as unknown as { loanerVehicleId?: string }).loanerVehicleId)?.model}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Shuttle queue — 3 rides */}
+            <div className="px-4 pb-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden">
+                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-xl bg-sky-500 text-white grid place-items-center"><Van className="h-3.5 w-3.5" weight="bold" /></div>
+                    <div>
+                      <div className="text-xs font-black">Shuttle Queue • 3 rides</div>
+                      <div className="text-[11px] text-zinc-400">Van 1 • Van 2 • queue → en-route → completed</div>
+                    </div>
+                  </div>
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white text-black text-[11px] font-bold px-2.5 py-1"><RoadHorizon className="h-3 w-3" /> Live ETA</span>
+                </div>
+                <div className="divide-y divide-white/10">
+                  {shuttleRides.map((r) => {
+                    const statusColor = r.status === "queued" ? "bg-amber-500 text-black" : r.status === "en_route" ? "bg-sky-500 text-white" : "bg-emerald-500 text-white"
+                    return (
+                      <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
+                        <span className={`h-2 w-2 rounded-full ${r.status==="queued" ? "bg-amber-500" : r.status==="en_route" ? "bg-sky-500 animate-pulse" : "bg-emerald-500"}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold">{r.customerName} • <span className="font-normal text-zinc-400">{r.pickup} → {r.dropoff}</span></div>
+                          <div className="text-[11px] text-zinc-500">{r.driver ?? "Van 1"} • ETA {r.eta} • {r.id}</div>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${statusColor}`}>{r.status.replace("_"," ")}</span>
+                        <div className="flex gap-1">
+                          {r.status==="queued" && <button onClick={()=> dispatchShuttle(r.id)} className="rounded-full bg-white text-black text-xs font-bold px-3 py-1.5 hover:bg-zinc-100">Dispatch</button>}
+                          {r.status==="en_route" && <button onClick={()=> completeShuttle(r.id)} className="rounded-full bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 hover:bg-emerald-400">Complete</button>}
+                          {r.status==="completed" && <span className="rounded-full bg-white/10 border border-white/10 text-zinc-300 text-xs font-bold px-3 py-1.5">Completed ✓</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="px-4 py-2 bg-white/[0.03] border-t border-white/10 flex items-center gap-2 text-[11px] text-zinc-400">
+                  <House className="h-3 w-3" /> Door-to-door • avg 14 min • 2 vans • queue live • no phone tag
+                  <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full bg-white text-black font-bold px-2 py-0.5">ETA live</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ── E8-T10 Tire Hub — Fitment by VIN • Sets 4+TPMS • EV-weighted ── */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.12 }} className="col-span-12 lg:col-span-4 rounded-[20px] border border-white/[0.06] bg-zinc-900/60 backdrop-blur overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-xl bg-white text-zinc-900 grid place-items-center"><Tire className="h-4 w-4" weight="bold" /></div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">Tire Hub</span>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white text-black text-[10px] font-bold px-2 py-0.5 tracking-widest">E8-T10</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 text-white text-[11px] font-black px-2 py-1"><Tire className="h-3 w-3" weight="bold" /> EV §4.5</span>
+                  </div>
+                  <div className="text-xs text-zinc-400">Fitment by VIN • sets 4+TPMS • demand weighted</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3 flex-1">
+              {/* VIN fitment */}
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+                <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">VIN fitment</div>
+                <div className="mt-2 flex gap-2">
+                  <input value={tireVin} onChange={(e)=> setTireVin(e.target.value)} className="flex-1 rounded-full bg-white text-black font-mono text-sm font-bold px-3 py-2 focus:outline-none" placeholder="VIN" />
+                  <span className="inline-flex items-center rounded-full bg-emerald-500 text-black text-xs font-black px-3">Verified</span>
+                </div>
+                <div className="mt-2 text-[11px] text-zinc-400">RAV4 225/60R18 • Camry 235/45R18 • Highlander 235/55R20 • auto-decoded</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {tireSets.map(ts => (
+                    <button key={ts.id} onClick={()=> setTireVin(ts.vin)} className={`rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${tireVin===ts.vin ? "bg-white text-black border-white" : "bg-white/10 border-white/10 text-zinc-300 hover:bg-white/15"}`}>{ts.size} • {ts.fitment.split("•")[0].trim()}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Primary tire set — RAV4 225/60R18 requirement */}
+              {(() => {
+                const primary = tireSets.find(ts=> ts.vin===tireVin) ?? tireSets[0]
+                const isPrimaryRAV4 = primary.size==="225/60R18"
+                return (
+                  <div className={`rounded-2xl border-2 overflow-hidden ${primary.evWeighted ? "border-sky-500/30 bg-sky-500/10" : "border-white/10 bg-white text-zinc-900"}`}>
+                    <div className={`px-4 py-3 flex items-center justify-between ${primary.evWeighted ? "bg-sky-500 text-white" : "bg-zinc-900 text-white"}`}>
+                      <div className="flex items-center gap-2">
+                        <Tire className="h-4 w-4" weight="bold" />
+                        <span className="text-xs font-black tracking-widest uppercase">{primary.size} • {primary.fitment.split("•")[0].trim()}</span>
+                      </div>
+                      {primary.evWeighted && <span className="inline-flex items-center gap-1 rounded-full bg-white text-sky-700 text-[11px] font-black px-2 py-0.5">EV-weighted • 47% EV §4.5</span>}
+                    </div>
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-black">{primary.brand} • {primary.size}</div>
+                          <div className="text-xs text-zinc-600">{primary.fitment}</div>
+                          <div className="text-[11px] text-zinc-500 mt-1">{primary.includes} • VIN {primary.vin.slice(-8)} verified</div>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${primary.stock>5 ? "bg-emerald-500 text-white" : primary.stock>0 ? "bg-amber-500 text-black" : "bg-red-500 text-white"}`}>{primary.stock} sets • stock</span>
+                      </div>
+                      <div className="rounded-xl bg-zinc-900 text-white p-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Set price</div>
+                          <div className="text-xl font-black">${primary.price} <span className="text-sm font-medium text-zinc-400">/ set • 4 tires + TPMS</span></div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Stock</div>
+                          <div className="font-mono font-black">{primary.stock ===12 ? "12 sets" : `${primary.stock} sets`} {primary.stock===12 && <span className="text-emerald-400">● in stock</span>}</div>
+                        </div>
+                      </div>
+                      {isPrimaryRAV4 && <div className="rounded-xl bg-sky-50 border border-sky-200 p-2.5 text-xs font-medium text-sky-900">RAV4 225/60R18 is top fitment • EV-weighted demand +23% • 47% of EV service visits tire-related §4.5 • TPMS included</div>}
+                      <button
+                        onClick={()=> {
+                          if (!selectedRO) return
+                          addTireSetToRO(primary.id, selectedRO.id)
+                          setTireAddedFlash(primary.id)
+                          setTimeout(()=> setTireAddedFlash(null), 2400)
+                        }}
+                        disabled={primary.stock<=0 || !selectedRO}
+                        className={`w-full rounded-full font-black py-3 flex items-center justify-center gap-2 transition ${primary.stock<=0 ? "bg-zinc-200 text-zinc-500 cursor-not-allowed" : "bg-white text-black border-2 border-zinc-900 hover:bg-zinc-900 hover:text-white"} ${primary.evWeighted ? "ring-2 ring-sky-500/20" : ""}`}
+                      >
+                        <Tire className="h-4 w-4" weight="bold" /> Add to {selectedRO?.roNumber ?? "RO"} • ${primary.price} set
+                      </button>
+                      <AnimatePresence>
+                        {tireAddedFlash===primary.id && (
+                          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="rounded-xl bg-emerald-500 text-white px-3 py-2 flex items-center gap-2 text-xs font-bold">
+                            <CheckCircle className="h-4 w-4" weight="fill" /> Added • {primary.size} → {selectedRO?.roNumber} • stock {primary.stock} → {Math.max(0, primary.stock-1)} • MPI updated ✓
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2"><div className="font-mono font-black text-sm">4</div><div className="text-[11px] text-zinc-500">tires</div></div>
+                        <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2"><div className="font-mono font-black text-sm">4</div><div className="text-[11px] text-zinc-500">TPMS</div></div>
+                        <div className="rounded-xl bg-zinc-900 text-white py-2"><div className="font-mono font-black text-sm">12</div><div className="text-[11px] text-zinc-400">sets stock</div></div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Other sets compact */}
+              <div className="space-y-2">
+                {tireSets.filter(ts=> ts.vin !== tireVin).slice(0,2).map(ts=> (
+                  <div key={ts.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-white text-zinc-900 grid place-items-center shrink-0"><Tire className="h-5 w-5" /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-black">{ts.size} • {ts.brand}</div>
+                      <div className="text-[11px] text-zinc-400 truncate">{ts.fitment}</div>
+                      <div className="text-[11px] font-mono">Stock {ts.stock} • ${ts.price}</div>
+                    </div>
+                    <button onClick={()=> { if(selectedRO) { addTireSetToRO(ts.id, selectedRO.id); setTireAddedFlash(ts.id); setTimeout(()=> setTireAddedFlash(null), 2400) } }} className="rounded-full bg-white text-black text-xs font-bold px-3 py-1.5 hover:bg-zinc-100 shrink-0">+ RO</button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-3 text-center">
+                <div className="text-xs font-bold text-zinc-300">EV-weighted demand — 47% of EV service visits tire-related §4.5</div>
+                <div className="text-[11px] text-zinc-500 mt-1">Prius/BZ4X heavier • torque • TPMS resets auto • mount/balance road-force included • add to RO posts to MPI live</div>
+              </div>
             </div>
           </motion.div>
 
@@ -815,6 +1277,141 @@ export default function ServiceLane() {
                 <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] border border-white/10 px-3 py-1.5 text-xs font-semibold"><Eye className="h-3.5 w-3.5" /> {mpiStats.pending} pending</span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-black text-xs font-black px-3 py-1.5"><TrendUp className="h-3.5 w-3.5" /> Matrix pricing live</span>
               </div>
+            </div>
+
+            {/* ── E14-T07 P2 Voice-to-inspection-field — Technician-AI hold to record → pre-fill via store ── */}
+            <div className="px-4 py-3 bg-zinc-950 border-b border-white/[0.06] flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onMouseDown={startVoice}
+                    onMouseUp={endVoice}
+                    onMouseLeave={() => { if(isRecording) endVoice() }}
+                    onTouchStart={(e)=> { e.preventDefault(); startVoice() }}
+                    onTouchEnd={(e)=> { e.preventDefault(); endVoice() }}
+                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black tracking-wide transition select-none ${isRecording ? "bg-red-500 text-white animate-pulse shadow-[0_0_18px_rgba(239,68,68,0.6)]" : "bg-white text-black hover:bg-zinc-100 shadow"}`}
+                  >
+                    {isRecording ? (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                        <Waveform className="h-3.5 w-3.5 animate-pulse" weight="bold" /> Recording — speak now • release to stop
+                      </>
+                    ) : (
+                      <>
+                        <Microphone className="h-3.5 w-3.5" weight="fill" /> Hold to record
+                      </>
+                    )}
+                  </button>
+                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
+                    <Phone className="h-3 w-3" weight="bold" /> Technician phone → MPI fields
+                  </span>
+                  <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-violet-500/15 border border-violet-500/20 text-violet-300 px-2 py-0.5 text-[10px] font-bold tracking-widest">E14-T07 P2 • live</span>
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="hidden sm:inline text-[11px] text-zinc-500">Voice → inspection pre-fill • via store •</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-zinc-300">{selectedRO?.roNumber ?? "—"} • {voiceTranscripts.filter(v=> v.roId===selectedRO?.id).length} transcripts</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5">via E9 API</span>
+                </div>
+              </div>
+
+              {/* Transcript mock — live with actual voice transcript mock */}
+              <AnimatePresence>
+                {lastVoice && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 overflow-hidden"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-emerald-500/20 bg-emerald-500/15">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-300">
+                        <CheckCircle className="h-3.5 w-3.5" weight="fill" /> Transcript • live mock • {lastVoice.text}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5">
+                        {lastVoice.applied ? "Applied to MPI ✓" : "Pre-fills inspection fields via store"}
+                      </span>
+                    </div>
+                    <div className="p-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-zinc-900 border border-white/10 p-2.5">
+                          <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Item</div>
+                          <div className="text-sm font-black text-white">{lastVoice.parsed?.item ?? "—"}</div>
+                          <div className="text-[11px] text-zinc-400">voice parsed</div>
+                        </div>
+                        <div className="rounded-xl bg-zinc-900 border border-white/10 p-2.5">
+                          <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Measurement</div>
+                          <div className="text-sm font-black text-white">{lastVoice.parsed?.measurement ?? "—"}</div>
+                          <div className="text-[11px] text-zinc-400">+ spec Min 2mm</div>
+                        </div>
+                        <div className="rounded-xl bg-zinc-900 border border-white/10 p-2.5">
+                          <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Labor</div>
+                          <div className="text-sm font-black text-white">{lastVoice.parsed?.laborHours ?? "—"}h</div>
+                          <div className="text-[11px] text-zinc-400">Op {lastVoice.parsed?.laborOp ?? "BRK-F-01"}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 rounded-xl bg-white text-black p-2.5 flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold tracking-widest text-zinc-500 uppercase">Pre-filled inspection fields</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 text-white text-xs font-bold px-2.5 py-1">
+                          {lastVoice.parsed?.item} {lastVoice.parsed?.measurement} • {lastVoice.parsed?.recommendation}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 text-black text-xs font-black px-2.5 py-1">{lastVoice.parsed?.laborHours}h • Op {lastVoice.parsed?.laborOp}</span>
+                        <span className="ml-auto font-mono text-[11px] text-zinc-500">{lastVoice.viaE9Api}</span>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap gap-2">
+                        {!lastVoice.applied ? (
+                          <>
+                            <button
+                              onClick={handleApplyVoice}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-white text-black text-xs font-black px-4 py-2 hover:bg-zinc-100 transition shadow"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" weight="bold" /> Add to MPI • {lastVoice.parsed?.measurement} • ${lastVoice.parsed?.retailAmount ?? 289} • labor {lastVoice.parsed?.laborHours}h
+                            </button>
+                            <button
+                              onClick={() => dismissVoiceTranscript(lastVoice.id)}
+                              className="rounded-full bg-white/10 border border-white/10 text-white text-xs font-semibold px-4 py-2 hover:bg-white/15"
+                            >
+                              Dismiss
+                            </button>
+                            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-1">
+                              E14 • voice pre-fill via store • Technician-AI
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 text-white text-xs font-black px-4 py-2">
+                              <CheckCircle className="h-3.5 w-3.5" weight="fill" /> Added to MPI • inspection fields pre-filled • live via store
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 text-white text-xs font-bold px-3 py-2 border border-white/10">
+                              RO now {selectedRO?.mpiItems.length ?? "—"} items • MPI updated live • approveMpiItem
+                            </span>
+                            <button onClick={() => dismissVoiceTranscript(lastVoice.id)} className="ml-auto rounded-full bg-white/10 border border-white/10 text-white text-xs font-medium px-3 py-1.5 hover:bg-white/15">Dismiss</button>
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[11px] leading-relaxed text-emerald-200/80">
+                        Hold to record → transcript “{lastVoice.text}” → parsed via store.addVoiceTranscript → pre-fills inspection fields (item, measurement, recommendation, labor) → Apply creates MPI item via store.applyVoiceTranscript • voiceTranscripts: {voiceTranscripts.length} • via {lastVoice.viaE9Api}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {!lastVoice && (
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-3 py-2.5 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-zinc-300"><Microphone className="h-3.5 w-3.5" weight="bold" /> Try it:</span>
+                  <span className="font-mono bg-white text-black px-2 py-0.5 rounded-full text-[11px] font-bold">“Brake pads 4mm, recommend replace, labor 1.2h”</span>
+                  <span className="text-zinc-500">Hold button • mock transcript auto-generates • pre-fills {selectedRO?.roNumber ?? "RO-1001"} MPI • demo without mic — Technician-AI direction</span>
+                  <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white">E9 • /v1/service/repair-orders/{selectedRO?.id ?? "RO-1001"}/mpi/voice</span>
+                </div>
+              )}
+
+              {recordingPulse && (
+                <div className="flex items-center gap-2 text-xs font-bold text-red-400">
+                  <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                  Listening — technician phone • waveform live • release to transcribe
+                  <span className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] text-zinc-500">mock STT • 42ms • Technician-AI</span>
+                </div>
+              )}
             </div>
 
             {/* Summary bar */}

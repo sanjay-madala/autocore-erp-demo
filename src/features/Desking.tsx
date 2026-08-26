@@ -24,6 +24,7 @@ import {
   WarningCircle,
   Copy,
   Wrench,
+  PlugsConnected,
 } from "@phosphor-icons/react"
 
 /* ───────── dummy data ───────── */
@@ -165,6 +166,9 @@ export default function Desking() {
   const acceptCopilot = useStore((s) => s.acceptCopilot)
   const dismissCopilot = useStore((s) => s.dismissCopilot)
   const generateCopilotForDeal = useStore((s) => s.generateCopilotForDeal)
+  // E5-T09 OEM SmartPath / Monogram — certified program hooks via E9 API
+  const oemPrograms = useStore((s) => s.oemPrograms)
+  const [oemApplied, setOemApplied] = useState<string | null>(null)
 
   const vehicle: Vehicle | undefined = useMemo(() => vehicles.find((v) => v.id === selectedVehicleId), [selectedVehicleId])
   const lender: Lender | undefined = useMemo(() => LENDERS.find((l) => l.id === lenderId), [lenderId])
@@ -530,6 +534,145 @@ export default function Desking() {
               </Button>
               <span className="font-mono text-[10px] text-[var(--text-faint)]">tracking #VIT-8841 mock • queued</span>
             </div>
+          </div>
+        </div>
+
+        {/* ── E5-T09 P1 OEM SmartPath / Monogram — certified OEM program hooks via E9 API ── */}
+        <div className="mt-3 overflow-hidden rounded-2xl border border-[var(--accent-border)] bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">
+            <div className="flex items-center gap-3">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#EB0A1E] text-white font-black text-[10px] leading-none">TOY</span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-semibold">OEM Programs — Certified</span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px] tracking-widest text-white border border-white/15">E5-T09 P1</span>
+                  <span className="hidden rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white md:inline-flex">SmartPath • Monogram</span>
+                </div>
+                <div className="text-[11px] leading-none text-white/70">
+                  Toyota SmartPath badge • Monogram desking integration • TFS program rules • <span className="font-mono text-white/90">E9 API • dealer-consented</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white md:inline-flex">Sovereign Toyota Downtown • dtown • certified ✓</span>
+              <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold text-zinc-900">E9 • STAR payload</span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-4 md:grid-cols-2">
+            {oemPrograms.map((prog) => {
+              const isSmartPath = prog.program === "SmartPath"
+              const applied = oemApplied === prog.program
+              return (
+                <div key={prog.program} className={`relative overflow-hidden rounded-2xl border p-4 flex flex-col gap-3 transition-colors-taste ${applied ? "border-emerald-300 bg-emerald-50" : "border-[var(--border)] bg-[var(--surface-muted)]/60 hover:bg-white"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`grid h-9 w-9 place-items-center rounded-xl text-white font-black text-[11px] leading-none shadow-sm ${isSmartPath ? "bg-[#EB0A1E]" : "bg-zinc-900"}`}>
+                        {isSmartPath ? "SP" : "MG"}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] font-semibold leading-none">{prog.oem} {prog.program}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${prog.certified ? "bg-emerald-500 text-white" : "bg-amber-500 text-black"}`}>{prog.badge}</span>
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)]">{prog.rooftopId} • certified rooftop • {prog.integration}</div>
+                      </div>
+                    </div>
+                    <span className="hidden rounded-full bg-white border border-[var(--border)] px-2 py-0.5 font-mono text-[10px] font-semibold shadow-sm sm:inline-flex">{prog.rooftopId} • 1 VIN sync</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl border border-[var(--border)] bg-white p-2.5">
+                      <div className="text-label-mono text-[var(--text-muted)]">Loyalty</div>
+                      <div className="font-mono text-[16px] font-[700] text-emerald-700">${prog.loyalty}</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">factory cash</div>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] bg-white p-2.5">
+                      <div className="text-label-mono text-[var(--text-muted)]">TFS rate</div>
+                      <div className="font-mono text-[16px] font-[700]">{prog.rate.toFixed(2)}%</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">72mo • captive</div>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] bg-white p-2.5">
+                      <div className="text-label-mono text-[var(--text-muted)]">API</div>
+                      <div className="font-mono text-[11px] font-[700] leading-none">E9</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">consented</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-white px-3 py-2.5">
+                    <div className="text-label-mono text-[var(--text-muted)]">OEM rules — program hooks</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {prog.rules.map((r) => (
+                        <span key={r} className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white">
+                          <SealCheck size={11} weight="fill" className="text-emerald-400" /> {r}
+                        </span>
+                      ))}
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                        <ShieldCheck size={11} weight="fill" /> Monogram payload sync ✓
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-zinc-950 px-3 py-2.5 font-mono text-[11px] leading-snug text-zinc-300">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+                      <PlugsConnected size={12} className="text-sky-400" /> E9 API — desking integration
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded bg-sky-500 px-1.5 py-0.5 text-[11px] font-bold text-white">GET</span>
+                      <span className="truncate font-semibold text-white">{prog.apiPath}</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`curl -H "Authorization: Bearer issk_live_..." "https://api.autocore.erp${prog.apiPath}?vin=${vehicle?.vin ?? "JTMAAACA4PA042118"}"`)
+                          pushAudit(`E9 • ${prog.program}`, `Copied E9 API path • ${prog.apiPath} • STAR desking payload • scopes read:oem`)
+                        }}
+                        className="ml-auto inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-100"
+                      >
+                        <Copy size={11} /> Copy curl
+                      </button>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-white/10 border border-white/15 px-2 py-0.5 text-[10px]">scopes: read:oem • write:desking</span>
+                      <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">dealer-consented • revocable</span>
+                      <span className="rounded-full bg-white/10 border border-white/15 px-2 py-0.5 text-[10px]">STAR 7.4 • desking payload</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={`flex-1 gap-1.5 ${applied ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
+                      onClick={() => {
+                        setLoyalty(true)
+                        setLenderId("tfs")
+                        setOemApplied(prog.program)
+                        const msg = `${prog.oem} ${prog.program} applied • loyalty $${prog.loyalty} • TFS ${prog.rate.toFixed(2)}% • via ${prog.apiPath} • Monogram sync • E9 consented`
+                        pushAudit(`OEM • ${prog.program} • E5-T09`, msg)
+                        setAudit((a) => [...a, { t: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), who: `System • E9 ${prog.program}`, what: msg }])
+                      }}
+                    >
+                      {applied ? <><CheckCircle size={14} weight="fill" /> Applied — pencil updated ✓</> : <><Sparkle size={14} weight="fill" /> Apply {prog.program} to pencil</>}
+                    </Button>
+                    <span className={`hidden font-mono text-[11px] sm:inline ${applied ? "text-emerald-700 font-semibold" : "text-[var(--text-muted)]"}`}>
+                      {applied ? "loyalty $500 + TFS 6.49% live • +$1,500 incentives" : "→ loyalty toggle + TFS rate 6.49%"}
+                    </span>
+                  </div>
+                  {applied && (
+                    <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                      <CheckCircle size={14} weight="fill" className="text-emerald-600" /> Applied — incentive ${prog.loyalty} now reduces taxable • lender set to Toyota Financial {prog.rate.toFixed(2)}% • audit logged • via E9 API
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5 text-[11px] text-[var(--text-muted)]">
+            <span className="inline-flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+              <ShieldCheck size={12} weight="fill" className="text-emerald-600" /> Certified OEM program hooks • SmartPath + Monogram via E9 • dealer-consented OAuth
+            </span>
+            <span className="hidden h-1 w-1 rounded-full bg-[var(--text-muted)] md:inline-block" />
+            <span className="font-mono text-[11px]">STAR desking payload • scopes read:oem • write:desking • every read logged</span>
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-semibold text-white">E5-T09 P1 • E9 API</span>
           </div>
         </div>
 

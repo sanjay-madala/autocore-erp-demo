@@ -33,6 +33,12 @@ import {
   Phone,
   Eye,
   Link as LinkIcon,
+  Van,
+  Tire,
+  Car,
+  GasPump,
+  Microphone,
+  Waveform,
 } from "@phosphor-icons/react"
 import { useStore } from "@/lib/store"
 import type { Part as StorePart } from "@/data/parts"
@@ -80,6 +86,16 @@ export default function PartsCounter() {
   const partsStore = useStore((s) => s.parts)
   const sellPart = useStore((s) => s.sellPart)
   const createShortSale = useStore((s) => s.createShortSale)
+  // E8-T10 Tire Hub — live store
+  const tireSets = useStore((s) => s.tireSets)
+  const repairOrders = useStore((s) => s.repairOrders)
+  const addTireSetToRO = useStore((s) => s.addTireSetToRO)
+  // E14-T07 P2 Voice for parts counter — device camera + voice
+  const voiceTranscripts = useStore((s) => s.voiceTranscripts)
+  const addVoiceTranscript = useStore((s) => s.addVoiceTranscript)
+  const [tireVin, setTireVin] = useState("2T3B1RFVXNW147882")
+  const [tireAddedFlash, setTireAddedFlash] = useState<string | null>(null)
+  const [selectedROId, setSelectedROId] = useState<string>(repairOrders[0]?.id ?? "RO-1001")
 
   const [vin, setVin] = useState("4T1G11AK2RU771842")
   const [q, setQ] = useState("")
@@ -95,6 +111,10 @@ export default function PartsCounter() {
   const [scanValue, setScanValue] = useState("")
   const [invoiced, setInvoiced] = useState(false)
   const [poCreated, setPoCreated] = useState(false)
+  // E14-T07 P2 Voice for parts counter — hold to record → transcript → search
+  const [isPartVoiceRecording, setIsPartVoiceRecording] = useState(false)
+  const [lastPartVoiceId, setLastPartVoiceId] = useState<string | null>(null)
+  const lastPartVoice = useMemo(() => voiceTranscripts.find(v=> v.id===lastPartVoiceId) ?? voiceTranscripts.filter(v=> v.source==="parts_counter").slice(-1)[0] ?? null, [voiceTranscripts, lastPartVoiceId])
 
   // animations for live decrement / increment
   const [onHandAnim, setOnHandAnim] = useState<{ before: number; after: number } | null>(null)
@@ -410,6 +430,70 @@ export default function PartsCounter() {
               )}
             </AnimatePresence>
 
+            {/* ── E14-T07 P2 Voice input for parts counter — via device camera + mic — keep ── */}
+            <div className="px-5 py-3 bg-zinc-950 border-b border-zinc-200 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onMouseDown={() => setIsPartVoiceRecording(true)}
+                  onMouseUp={() => {
+                    if (!isPartVoiceRecording) return
+                    setIsPartVoiceRecording(false)
+                    const mock = "Brake pads"
+                    const entry = addVoiceTranscript(mock, null, "parts_counter")
+                    setLastPartVoiceId(entry.id)
+                    setQ("brake")
+                    const hit = partsStore.find((p) => p.partNumber === "04465-33150") ?? partsStore.find((p) => p.description.toLowerCase().includes("brake")) ?? partsStore[0]
+                    if (hit) setSelectedPartNumber(hit.partNumber)
+                  }}
+                  onMouseLeave={() => setIsPartVoiceRecording(false)}
+                  onTouchStart={(e)=> { e.preventDefault(); setIsPartVoiceRecording(true)}}
+                  onTouchEnd={(e)=> {
+                    e.preventDefault()
+                    if (!isPartVoiceRecording) return
+                    setIsPartVoiceRecording(false)
+                    const mock = "Brake pads"
+                    const entry = addVoiceTranscript(mock, null, "parts_counter")
+                    setLastPartVoiceId(entry.id)
+                    setQ("brake")
+                    const hit = partsStore.find((p) => p.partNumber === "04465-33150") ?? partsStore[0]
+                    if (hit) setSelectedPartNumber(hit.partNumber)
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black tracking-wide transition select-none ${isPartVoiceRecording ? "bg-red-500 text-white animate-pulse shadow-[0_0_18px_rgba(239,68,68,0.5)]" : "bg-white text-black border border-zinc-200 hover:bg-zinc-50 shadow-sm"}`}
+                >
+                  {isPartVoiceRecording ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                      <Waveform className="h-3.5 w-3.5 animate-pulse" weight="bold" /> Listening — parts
+                    </>
+                  ) : (
+                    <>
+                      <Microphone className="h-3.5 w-3.5" weight="fill" /> Hold to speak — parts counter
+                    </>
+                  )}
+                </button>
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white border border-zinc-200 px-2.5 py-1 text-[11px] font-medium">Via device mic • camera scan kept ✓</span>
+                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-violet-500/15 border border-violet-500/20 text-violet-700 px-2 py-0.5 text-[10px] font-bold tracking-widest">E14-T07 P2 • voice</span>
+                <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-400 text-black text-[10px] font-black px-2 py-0.5">{voiceTranscripts.filter(v=> v.source==="parts_counter").length} parts voice • live</span>
+              </div>
+              <AnimatePresence>
+                {lastPartVoice && (
+                  <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800"><CheckCircle className="h-3.5 w-3.5" weight="fill" /> Voice: “{lastPartVoice.text}” • pre-filled search</span>
+                    <span className="rounded-full bg-white border border-emerald-200 px-2 py-0.5 font-mono text-[11px] font-semibold">q = “brake” • {partsStore.filter((p)=> (p.partNumber+p.description).toLowerCase().includes("brake")).length} matches</span>
+                    <span className="rounded-full bg-zinc-900 text-white px-2 py-0.5 text-[11px] font-mono">via {lastPartVoice.viaE9Api} • {lastPartVoice.at.slice(11,19)}</span>
+                    <button onClick={()=> { setQ(""); setLastPartVoiceId(null)}} className="ml-auto rounded-full bg-white border border-zinc-200 px-2.5 py-1 text-[11px] font-semibold hover:bg-zinc-50">Clear</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {!lastPartVoice && (
+                <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">Try:</span> <span className="font-mono bg-white border border-zinc-200 px-2 py-0.5 rounded-full text-[11px] font-bold">“Brake pads”</span>
+                  <span className="text-zinc-500">Hold button • mock transcript → search + bin highlight • device camera scan remains</span>
+                  <span className="ml-auto font-mono text-[10px] text-zinc-400">E9 • /v1/voice/parts • STAR</span>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-12 gap-0">
               {/* Part grid — now driven by Zustand store parts */}
               <div className="col-span-12 lg:col-span-7 p-4">
@@ -619,6 +703,150 @@ export default function PartsCounter() {
               </div>
             </div>
           </div>
+
+          {/* ── E8-T10 Tire Hub — VIN fitment • sets 4+TPMS • EV-weighted 47% §4.5 ── */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="col-span-12 rounded-[20px] border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-xl bg-zinc-900 text-white grid place-items-center"><Tire className="h-4 w-4" weight="bold" /></div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black tracking-tight">Tire Hub • VIN Fitment</span>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-zinc-900 text-white text-[10px] font-bold px-2 py-0.5 tracking-widest">E8-T10</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 text-white text-[11px] font-black px-2 py-1"><Tire className="h-3 w-3" weight="bold" /> EV §4.5</span>
+                  </div>
+                  <div className="text-xs text-zinc-500 font-medium">RAV4 225/60R18 • 4 tires + TPMS • stock 12 sets • $899 set • add to RO</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-2.5 py-1"><CheckCircle className="h-3.5 w-3.5" weight="fill" /> VIN verified</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 text-black text-xs font-black px-2.5 py-1">Sets • {tireSets.reduce((s,t)=>s+t.stock,0)} in stock</span>
+              </div>
+            </div>
+
+            <div className="p-4 grid grid-cols-12 gap-4">
+              {/* VIN fitment + primary set */}
+              <div className="col-span-12 lg:col-span-7">
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                  <div className="text-[11px] font-black tracking-widest text-zinc-500 uppercase">Fitment by VIN</div>
+                  <div className="mt-2 flex gap-2">
+                    <input value={tireVin} onChange={(e)=> setTireVin(e.target.value)} className="flex-1 rounded-full bg-white border border-zinc-200 font-mono text-sm font-bold px-3 py-2 focus:outline-none focus:border-zinc-900" placeholder="VIN — 17 chars" />
+                    <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-500 text-white text-xs font-black px-3">Verified</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {tireSets.map(ts=> (
+                      <button key={ts.id} onClick={()=> setTireVin(ts.vin)} className={`rounded-full px-3 py-1.5 text-xs font-bold border transition ${tireVin===ts.vin ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>{ts.size} • {ts.fitment.split("•")[0].trim()}</button>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11px] text-zinc-500">RAV4 225/60R18 verified • Bridgestone/Michelin • door fits 2019-2025 • TPMS pre-programmed</div>
+                </div>
+
+                {(() => {
+                  const primary = tireSets.find(ts=> ts.vin===tireVin) ?? tireSets[0]
+                  return (
+                    <div className={`mt-3 rounded-2xl border-2 overflow-hidden ${primary.evWeighted ? "border-sky-500 bg-sky-50" : "border-zinc-200 bg-white"}`}>
+                      <div className={`px-4 py-3 flex items-center justify-between ${primary.evWeighted ? "bg-sky-500 text-white" : "bg-zinc-900 text-white"}`}>
+                        <div className="flex items-center gap-2">
+                          <Tire className="h-4 w-4" weight="bold" />
+                          <span className="text-sm font-black">{primary.size} • {primary.fitment}</span>
+                        </div>
+                        {primary.evWeighted && <span className="inline-flex items-center gap-1 rounded-full bg-white text-sky-700 text-[11px] font-black px-2 py-0.5">EV-weighted • 47% §4.5</span>}
+                      </div>
+                      <div className="p-4 space-y-3 bg-white">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-black">{primary.brand} • {primary.size}</div>
+                            <div className="text-xs text-zinc-500">{primary.includes}</div>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${primary.stock>5 ? "bg-emerald-500 text-white" : "bg-amber-500 text-black"}`}>{primary.stock} sets</span>
+                        </div>
+                        <div className="rounded-xl bg-zinc-900 text-white p-3 flex items-center justify-between">
+                          <div><div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Price per set</div><div className="text-xl font-black">${primary.price} <span className="text-sm font-medium text-zinc-400">/ 4+TPMS</span></div></div>
+                          <div className="text-right"><div className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">Stock</div><div className="font-mono font-black">{primary.stock} sets</div></div>
+                        </div>
+                        {primary.size==="225/60R18" && <div className="rounded-xl bg-sky-50 border border-sky-200 p-2.5 text-xs font-medium text-sky-900">RAV4 225/60R18 factory size • EV-weighted • 47% of EV service visits tire-related §4.5 • mount/balance road-force included</div>}
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2"><div className="font-mono font-black text-sm">4</div><div className="text-zinc-500">Tires</div></div>
+                          <div className="rounded-xl bg-zinc-50 border border-zinc-200 py-2"><div className="font-mono font-black text-sm">4</div><div className="text-zinc-500">TPMS</div></div>
+                          <div className="rounded-xl bg-zinc-900 text-white py-2"><div className="font-mono font-black text-sm">12</div><div className="text-zinc-400">Max stock</div></div>
+                        </div>
+                        <div className="flex gap-2">
+                          <select value={selectedROId} onChange={(e)=> setSelectedROId(e.target.value)} className="flex-1 rounded-full bg-zinc-50 border border-zinc-200 text-sm font-bold px-3 py-2.5 focus:outline-none">
+                            {repairOrders.slice(0,5).map(r=> (
+                              <option key={r.id} value={r.id}>{r.roNumber} • {r.customerName} • {(r as unknown as { loanerVehicleId?: string }).loanerVehicleId ? "loaner " + (r as unknown as { loanerVehicleId?: string }).loanerVehicleId : "no loaner"}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={()=> {
+                              addTireSetToRO(primary.id, selectedROId)
+                              setTireAddedFlash(primary.id)
+                              setTimeout(()=> setTireAddedFlash(null), 2500)
+                            }}
+                            disabled={primary.stock<=0}
+                            className={`rounded-full font-black px-5 py-2.5 flex items-center gap-1.5 transition ${primary.stock<=0 ? "bg-zinc-200 text-zinc-500" : "bg-zinc-900 text-white hover:bg-black"}`}
+                          >
+                            <Tire className="h-4 w-4" weight="bold" /> Add to RO
+                          </button>
+                        </div>
+                        <AnimatePresence>
+                          {tireAddedFlash===primary.id && (
+                            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="rounded-xl bg-emerald-500 text-white px-3 py-2 flex items-center gap-2 text-xs font-bold">
+                              <CheckCircle className="h-4 w-4" weight="fill" /> Added • {primary.size} → {repairOrders.find(r=> r.id===selectedROId)?.roNumber} • stock {primary.stock}→{Math.max(0, primary.stock-1)} • MPI live ✓
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* EV badge + sets list */}
+              <div className="col-span-12 lg:col-span-5 space-y-3">
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-sky-500 text-white grid place-items-center"><Tire className="h-4 w-4" weight="bold" /></div>
+                    <div>
+                      <div className="text-xs font-black tracking-widest uppercase text-sky-900">EV-weighted demand</div>
+                      <div className="text-sm font-black text-sky-900">47% of EV service visits tire-related §4.5</div>
+                    </div>
+                    <span className="ml-auto hidden sm:inline-flex items-center gap-1 rounded-full bg-sky-500 text-white text-[11px] font-black px-2 py-1">EV §4.5</span>
+                  </div>
+                  <div className="mt-2 text-xs leading-relaxed text-sky-800">Heavier curb • instant torque • faster wear • rotations every 5k • stock 12 sets for RAV4 225/60R18 keeps wait under 90m promise</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl bg-white border border-sky-200 py-2"><div className="text-sm font-black">12</div><div className="text-[11px] text-zinc-500">RAV4 sets</div></div>
+                    <div className="rounded-xl bg-zinc-900 text-white py-2"><div className="text-sm font-black">$899</div><div className="text-[11px] text-zinc-400">per set</div></div>
+                    <div className="rounded-xl bg-white border border-sky-200 py-2"><div className="text-sm font-black">4+TPMS</div><div className="text-[11px] text-zinc-500">per set</div></div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+                  <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
+                    <span className="text-xs font-black">All tire sets</span>
+                    <span className="text-[11px] font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-full">{tireSets.length} SKUs</span>
+                  </div>
+                  <div className="divide-y divide-zinc-100">
+                    {tireSets.map(ts=> (
+                      <div key={ts.id} className="px-4 py-3 flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-xl grid place-items-center shrink-0 ${ts.evWeighted ? "bg-sky-500 text-white" : "bg-zinc-900 text-white"}`}><Tire className="h-5 w-5" weight="bold" /></div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-black flex items-center gap-1">{ts.size} • {ts.brand} {ts.evWeighted && <span className="rounded-full bg-sky-500 text-white text-[10px] font-black px-1.5 py-0.5">EV</span>}</div>
+                          <div className="text-[11px] text-zinc-500 truncate">{ts.fitment}</div>
+                          <div className="text-[11px] font-mono">Stock {ts.stock} • ${ts.price} • 4+TPMS</div>
+                        </div>
+                        <button onClick={()=> { addTireSetToRO(ts.id, selectedROId); setTireAddedFlash(ts.id); setTimeout(()=> setTireAddedFlash(null), 2400) }} className="rounded-full bg-white border border-zinc-200 text-xs font-bold px-3 py-1.5 hover:bg-zinc-50 shrink-0">+ RO</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-zinc-900 text-white p-3 flex items-center gap-2 text-xs">
+                  <Van className="h-4 w-4 text-zinc-400" />
+                  <span className="font-medium">Cross-sell at write-up • EV customers 2.3× tire attach • loaner keeps car while tires mounted</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
 
           {/* Row 2: Counter sale + Stock order + Backorder integrity */}
           <div className="col-span-12 lg:col-span-7 rounded-[20px] border border-zinc-200 bg-white shadow-sm overflow-hidden flex flex-col">

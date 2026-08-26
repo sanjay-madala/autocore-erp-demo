@@ -161,6 +161,8 @@ export default function DeveloperPortal() {
   // E12 — Safeguards evidence pack
   const compliance = useStore((s) => s.complianceState)
   const exportSafeguards = useStore((s) => s.exportSafeguards)
+  // E5-T09 OEM programs live via store
+  const oemProgramsPortal = useStore((s) => s.oemPrograms)
   const [safeguardsExportedAt, setSafeguardsExportedAt] = useState<number | null>(null)
   const [safeguardsAgo, setSafeguardsAgo] = useState("4.2s ago")
   useEffect(() => {
@@ -302,6 +304,50 @@ export default function DeveloperPortal() {
                 <span className="ml-auto rounded-full bg-zinc-900 px-2 py-0.5 font-mono text-[10px] font-semibold text-white">E9</span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── E5-T09 P1 OEM SmartPath / Monogram — via E9 API — certified hooks ── */}
+      <div className="mx-auto max-w-[1440px] px-5 pt-4 md:px-6">
+        <div className="overflow-hidden rounded-2xl border border-[var(--accent-border)] bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#EB0A1E] text-white font-black text-[10px]">TOY</span>
+              <span className="text-[13px] font-semibold">OEM Programs — SmartPath / Monogram via E9 API</span>
+              <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px] border border-white/15">E5-T09 P1</span>
+              <span className="hidden rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white md:inline-flex">Certified • dealer-consented</span>
+            </div>
+            <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold text-zinc-900">/v1/oem/* • STAR payload • E9</span>
+          </div>
+          <div className="grid gap-3 p-4 md:grid-cols-2">
+            {oemProgramsPortal.map((prog)=> (
+              <div key={prog.program} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className={`grid h-8 w-8 place-items-center rounded-xl text-white font-black text-[10px] ${prog.program==="SmartPath" ? "bg-[#EB0A1E]" : "bg-zinc-900"}`}>{prog.program==="SmartPath" ? "SP" : "MG"}</span>
+                  <div>
+                    <div className="flex items-center gap-1.5"><span className="text-[13px] font-semibold">{prog.oem} {prog.program}</span><span className="rounded-full bg-emerald-500 text-white px-1.5 py-0.5 text-[10px] font-bold">{prog.badge}</span></div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{prog.integration} • {prog.rooftopId} • certified</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {prog.rules.map((r)=> (
+                    <span key={r} className="rounded-full bg-zinc-900 text-white px-2 py-1 text-[11px] font-medium">{r}</span>
+                  ))}
+                </div>
+                <div className="rounded-xl bg-zinc-950 px-3 py-2 font-mono text-[11px] text-zinc-300">
+                  <span className="rounded bg-sky-500 px-1.5 py-0.5 text-[11px] font-bold text-white">GET</span> <span className="text-white font-semibold">{prog.apiPath}</span> <span className="ml-2 text-zinc-400">loyalty ${prog.loyalty} • TFS {prog.rate.toFixed(2)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* fallback static when store hook not allowed in static context — ensure at least SmartPath shows */}
+          <div className="hidden">
+            {/* ensures Tailwind keeps classes — not rendered */}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5 text-[11px] text-[var(--text-muted)]">
+            <span className="inline-flex items-center gap-1 font-medium text-[var(--text-primary)]"><ShieldCheck size={12} weight="fill" className="text-emerald-600" /> SmartPath badge • Monogram desking sync • TFS 6.49% + loyalty $500 • via E9 dealer-consented OAuth</span>
+            <span className="ml-auto font-mono text-[10px]">E9 • scopes read:oem • STAR desking payload • audit-logged</span>
           </div>
         </div>
       </div>

@@ -167,6 +167,12 @@ export type MigrationState = {
 export type VendorPayment = { id: string; vendor: string; amount: number; status: "pending" | "paid"; dueDate: string }
 export type DataWarehouseState = { lastExportAt: string; status: string; rows: number; sizeGb: number }
 
+// ── E7-T11 Loaner & Shuttle + E8-T10 Tire Hub ──
+export type LoanerStatus = "available" | "on_loan" | "maintenance"
+export type LoanerVehicle = { id: string; model: string; status: LoanerStatus; roId: string | null; fuel: string; damage: string | null; plate?: string; odoOut?: number; odoIn?: number }
+export type ShuttleRide = { id: string; customerName: string; pickup: string; dropoff: string; status: "queued" | "en_route" | "completed"; eta: string; driver?: string }
+export type TireSet = { id: string; vin: string; fitment: string; size: string; includes: string; stock: number; price: number; evWeighted: boolean; brand: string; stockNote?: string }
+
 // ── F8 Multi-rooftop Close + F14 Incentives ──
 export type RooftopMeta = { id: "dtown"|"north"|"westside"; name: string; brand: string; oemFormat: string; region: string }
 export const groupMeta = {
@@ -277,6 +283,61 @@ export const seedCopilotSuggestions: CopilotSuggestionItem[] = [
   },
 ]
 
+// ── E5-T09 OEM SmartPath + Monogram P1 — certified OEM program hooks ──
+export type OemProgram = {
+  oem: string
+  program: "SmartPath" | "Monogram" | string
+  loyalty: number
+  rate: number
+  certified: boolean
+  badge: string
+  rules: string[]
+  apiPath: string
+  rooftopId: string
+  integration: string
+}
+export const seedOemPrograms: OemProgram[] = [
+  { oem: "Toyota", program: "SmartPath", loyalty: 500, rate: 6.49, certified: true, badge: "SmartPath Certified", rules: ["Toyota loyalty $500", "TFS rate 6.49% APR 72mo", "Monogram desking integration"], apiPath: "/v1/oem/toyota/smartpath/desking", rooftopId: "dtown", integration: "E9 API • dealer-consented • STAR desking payload" },
+  { oem: "Toyota", program: "Monogram", loyalty: 500, rate: 6.49, certified: true, badge: "Monogram Integrated", rules: ["Monogram desking — single desking payload", "TFS subvention eligible • factory program"], apiPath: "/v1/oem/toyota/monogram/quote", rooftopId: "dtown", integration: "E9 API • Monogram quote → pencil sync" },
+]
+
+// ── E14-T07 P2 Voice-to-inspection-field pre-fill — Technician-AI direction ──
+export type VoiceTranscript = {
+  id: string
+  text: string
+  roId: string | null
+  at: string
+  parsed: { item: string; measurement: string; recommendation: string; laborHours: number; laborOp?: string; retailAmount?: number } | null
+  applied: boolean
+  source: "technician_phone" | "mpi_video" | "parts_counter"
+  viaE9Api?: string
+}
+export const seedVoiceTranscripts: VoiceTranscript[] = []
+function parseVoiceTranscript(text: string): VoiceTranscript["parsed"] {
+  const t = text.toLowerCase()
+  const mmMatch = text.match(/(\d+(?:\.\d+)?\s*mm)/i)
+  const laborMatch = text.match(/labor\s*(\d+(?:\.\d+)?)\s*h/i) || text.match(/(\d+(?:\.\d+)?)\s*h\b/i)
+  const measurement = mmMatch ? mmMatch[1].replace(/\s+/g, "") : "4mm"
+  const laborHours = laborMatch ? parseFloat(laborMatch[1]) : 1.2
+  let item = "Brake pads"
+  if (t.includes("brake pad")) item = "Brake pads"
+  else if (t.includes("tire")) item = "Tires"
+  else if (t.includes("battery")) item = "Battery"
+  else if (t.includes("cabin")) item = "Cabin filter"
+  else {
+    const first = text.split(",")[0]?.trim()
+    if (first) item = first.slice(0, 32)
+  }
+  let recommendation = "recommend replace"
+  if (t.includes("recommend replace")) recommendation = "recommend replace"
+  else if (t.includes("replace")) recommendation = "recommend replace"
+  else if (t.includes("resurface")) recommendation = "recommend resurface"
+  else recommendation = text.split(",").slice(1,2).join(",").trim().slice(0,48) || "recommend replace"
+  const laborOp = item.toLowerCase().includes("brake") ? "BRK-F-01" : undefined
+  const retailAmount = item.toLowerCase().includes("brake") ? 289 : 129
+  return { item, measurement, recommendation, laborHours, laborOp, retailAmount }
+}
+
 export type AppState = {
   vehicles: typeof seedVehicles
   customers: typeof seedCustomers
@@ -353,6 +414,16 @@ export type AppState = {
   dataWarehouse: DataWarehouseState
   payVendor: (id: string) => void
   exportWarehouse: () => void
+  // E7-T11 Loaner & Shuttle + E8-T10 Tire Hub
+  loanerFleet: LoanerVehicle[]
+  shuttleRides: ShuttleRide[]
+  tireSets: TireSet[]
+  assignLoanerToRO: (loanerId: string, roId: string) => void
+  returnLoaner: (loanerId: string, fuel: string, damage: string | null) => void
+  updateLoanerAgreement: (loanerId: string, fuel: string, damage: string | null) => void
+  dispatchShuttle: (rideId: string) => void
+  completeShuttle: (rideId: string) => void
+  addTireSetToRO: (tireSetId: string, roId: string) => void
   // F10 Migration
   runExtractor: (id: string) => void
   fixMapping: (field: string) => void
@@ -366,6 +437,13 @@ export type AppState = {
   dismissCopilot: (id: string) => void
   generateCopilotForDeal: (dealId: string) => void
   generateCopilotForRO: (roId: string) => void
+  // E5-T09 OEM programs — SmartPath / Monogram
+  oemPrograms: OemProgram[]
+  // E14-T07 P2 Voice transcripts — technician → MPI pre-fill
+  voiceTranscripts: VoiceTranscript[]
+  addVoiceTranscript: (text: string, roId?: string | null, source?: VoiceTranscript["source"]) => VoiceTranscript
+  applyVoiceTranscript: (transcriptId: string) => boolean
+  dismissVoiceTranscript: (id: string) => void
   // T1 Conversational BI
   conversationalBI: ConversationalBIState
   queryBI: (nl: string) => ConversationalBIEntry
@@ -549,6 +627,59 @@ const seedDataWarehouse: DataWarehouseState = {
   rows: 1_200_000,
   sizeGb: 4.2,
 }
+
+// ── E7-T11 Loaner Fleet (6) + Shuttle Queue (3) + E8-T10 Tire Hub ──
+const seedLoanerFleet: LoanerVehicle[] = [
+  { id: "LOAN-01", model: "2024 RAV4 XLE AWD", status: "available", roId: null, fuel: "Full", damage: null, plate: "SOV-101", odoOut: 12420 },
+  { id: "LOAN-02", model: "2024 Camry SE", status: "on_loan", roId: "RO-1001", fuel: "3/4", damage: null, plate: "SOV-102", odoOut: 8920, odoIn: 9015 },
+  { id: "LOAN-03", model: "2023 Highlander Hybrid Limited", status: "available", roId: null, fuel: "7/8", damage: null, plate: "SOV-103", odoOut: 18220 },
+  { id: "LOAN-04", model: "2024 Corolla LE", status: "maintenance", roId: null, fuel: "1/4", damage: "Front bumper scuff — photo logged • est $180", plate: "SOV-104", odoOut: 22100 },
+  { id: "LOAN-05", model: "2024 Prius XLE", status: "available", roId: null, fuel: "Full", damage: null, plate: "SOV-105", odoOut: 5420 },
+  { id: "LOAN-06", model: "2023 Venza Limited", status: "available", roId: null, fuel: "Full", damage: null, plate: "SOV-106", odoOut: 14880 },
+]
+
+const seedShuttleRides: ShuttleRide[] = [
+  { id: "SH-01", customerName: "Grace Kim", pickup: "Home — 1820 West End Ave", dropoff: "Sovereign Downtown", status: "queued", eta: "12 min", driver: "D. Patel — Van 1" },
+  { id: "SH-02", customerName: "Robert Owens", pickup: "Office — 4401 N Broadway", dropoff: "Sovereign Ford North", status: "en_route", eta: "6 min", driver: "M. Alvarez — Van 2" },
+  { id: "SH-03", customerName: "Priya Nair", pickup: "Sovereign Westside", dropoff: "Home — 902 Ackerman Pl", status: "queued", eta: "22 min", driver: "D. Patel — Van 1" },
+]
+
+const seedTireSets: TireSet[] = [
+  {
+    id: "TIRE-RAV4-22560R18",
+    vin: "2T3B1RFVXNW147882",
+    fitment: "RAV4 2019–2025 • XLE / XLE Premium / Limited",
+    size: "225/60R18",
+    includes: "4× Michelin Defender + 4× TPMS + mount/balance • road-force",
+    stock: 12,
+    price: 899,
+    evWeighted: true,
+    brand: "Michelin Defender",
+    stockNote: "EV-weighted • 47% EV visits tire-related §4.5",
+  },
+  {
+    id: "TIRE-CAMRY-23545R18",
+    vin: "4T1BF1FK6JU084412",
+    fitment: "Camry 2018–2024 • SE / XSE",
+    size: "235/45R18",
+    includes: "4× Bridgestone Turanza + TPMS",
+    stock: 8,
+    price: 849,
+    evWeighted: false,
+    brand: "Bridgestone",
+  },
+  {
+    id: "TIRE-HIGH-23555R20",
+    vin: "JTMAAACA4PA042118",
+    fitment: "Highlander 2020–2025 • Limited / Platinum",
+    size: "235/55R20",
+    includes: "4× Michelin Primacy + TPMS",
+    stock: 6,
+    price: 1099,
+    evWeighted: false,
+    brand: "Michelin Primacy",
+  },
+]
 
 function computeConsolidation(vehicles: typeof seedVehicles, deals: F1Deal[], repairOrders: typeof seedROs, parts: typeof seedParts) {
   const avgFloorplanFallback = 34800
@@ -777,7 +908,12 @@ export const useStore = create<AppState>((set, get)=> ({
   complianceState: seedComplianceState,
   vendorPayments: seedVendorPayments,
   dataWarehouse: seedDataWarehouse,
+  loanerFleet: seedLoanerFleet,
+  shuttleRides: seedShuttleRides,
+  tireSets: seedTireSets,
   copilotSuggestions: seedCopilotSuggestions,
+  oemPrograms: seedOemPrograms,
+  voiceTranscripts: seedVoiceTranscripts,
   submitVitu: (vin: string) => {
     const tracking = `VIT-${Math.floor(8000 + Math.random()*1000)}`
     const at = new Date().toISOString()
@@ -1531,6 +1667,133 @@ export const useStore = create<AppState>((set, get)=> ({
       dismissed: false,
     }
     return { copilotSuggestions: [...s.copilotSuggestions, newItem] }
+  }),
+  // ── E5-T09 OEM SmartPath + E14-T07 Voice MPI — P1/P2 ──
+  addVoiceTranscript: (text, roId=null, source="technician_phone") => {
+    const parsed = parseVoiceTranscript(text)
+    const entry: VoiceTranscript = {
+      id: `VT-${Date.now()}-${Math.floor(Math.random()*900+100)}`,
+      text,
+      roId: roId ?? null,
+      at: new Date().toISOString(),
+      parsed,
+      applied: false,
+      source,
+      viaE9Api: roId ? `/v1/service/repair-orders/${roId}/mpi/voice` : "/v1/voice/transcripts",
+    }
+    set(s=> ({ voiceTranscripts: [...s.voiceTranscripts, entry] }))
+    if (roId) {
+      const log: ComplianceAuditEntry = { at: entry.at, actor: `tech:${source}`, action: `VOICE transcript ${entry.id} → ${roId} parsed ${parsed?.item} ${parsed?.measurement} labor ${parsed?.laborHours}h`, resource: `voice:${entry.id}`, result: "success" as const, ip: "10.2.14.88" }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(set as any)((s: AppState) => ({ complianceState: { ...s.complianceState, accessLogs: [log, ...s.complianceState.accessLogs].slice(0,50) } }))
+    }
+    return entry
+  },
+  applyVoiceTranscript: (transcriptId) => {
+    const s = get()
+    const vt = s.voiceTranscripts.find(v=> v.id===transcriptId)
+    if (!vt || !vt.parsed || vt.applied) return false
+    const roId = vt.roId
+    if (!roId) return false
+    const ro = s.repairOrders.find(r=> r.id===roId)
+    if (!ro) return false
+    const parsed = vt.parsed
+    const newMpiId = `MPI-VOICE-${roId}-${Date.now().toString().slice(-4)}`
+    const isBrake = parsed.item.toLowerCase().includes("brake")
+    const newItem: Record<string, unknown> = {
+      id: newMpiId,
+      category: isBrake ? "safety" : "maintenance",
+      item: `${parsed.item} — voice ${parsed.measurement}`,
+      status: "red" as const,
+      measurement: parsed.measurement,
+      spec: isBrake ? "Min 2mm • voice-measured" : "voice-measured",
+      recommendation: `${parsed.recommendation} • labor ${parsed.laborHours}h • voice pre-fill ✓`,
+      laborOp: parsed.laborOp ?? (isBrake ? "BRK-F-01" : "MPI-VOICE-01"),
+      partsRequired: isBrake ? ["04465-33150","43512-33150 x2"] : [],
+      laborHours: parsed.laborHours,
+      retailAmount: parsed.retailAmount ?? 189,
+      photoUrl: isBrake ? "https://picsum.photos/seed/mpi-brake-voice/600/400" : "https://picsum.photos/seed/mpi-voice/600/400",
+      videoUrl: undefined,
+      approved: false,
+      voiceTranscriptId: vt.id,
+      voiceSource: vt.source,
+    }
+    set(state=> ({
+      repairOrders: state.repairOrders.map(r=> r.id===roId ? { ...r, mpiItems: [...(r.mpiItems as unknown as unknown[]), newItem] as unknown as typeof r.mpiItems, status: "waiting_approval" as unknown as typeof r.status } : r),
+      voiceTranscripts: state.voiceTranscripts.map(v=> v.id===transcriptId ? { ...v, applied: true } : v),
+    }))
+    const log2: ComplianceAuditEntry = { at: new Date().toISOString(), actor: "voice.service@autocore", action: `VOICE apply ${vt.id} → ${roId} MPI ${newMpiId} ${parsed.measurement} ${parsed.laborHours}h`, resource: `voice:apply:${vt.id}`, result: "success" as const, ip: "10.2.14.88" }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(set as any)((st: AppState)=> ({ complianceState: { ...st.complianceState, accessLogs: [log2, ...st.complianceState.accessLogs].slice(0,50) } }))
+    return true
+  },
+  dismissVoiceTranscript: (id)=> set(s=> ({ voiceTranscripts: s.voiceTranscripts.filter(v=> v.id!==id) })),
+  // ── E7-T11 Loaner Fleet + Shuttle + E8-T10 Tire Hub ──
+  assignLoanerToRO: (loanerId: string, roId: string) => set(s => {
+    const loaner = s.loanerFleet.find(l => l.id === loanerId)
+    if (!loaner || loaner.status !== "available") return s
+    const nextFleet = s.loanerFleet.map(l => l.id === loanerId ? { ...l, status: "on_loan" as LoanerStatus, roId, fuel: l.fuel } : l)
+    const nowIso = new Date().toISOString()
+    const log: ComplianceAuditEntry = { at: nowIso, actor: "service.lane@autocore", action: `POST /v1/loaners/${loanerId}/assign RO ${roId}`, resource: `loaner:${loanerId}`, result: "success" as const, ip: "10.2.14.30" }
+    return {
+      loanerFleet: nextFleet,
+      repairOrders: s.repairOrders.map(r => r.id === roId ? { ...(r as unknown as Record<string, unknown>), loanerVehicleId: loanerId, loanerModel: loaner.model, loanerAssignedAt: nowIso } as unknown as typeof r : r) as unknown as typeof s.repairOrders,
+      complianceState: { ...s.complianceState, accessLogs: [log, ...s.complianceState.accessLogs].slice(0, 50) },
+    }
+  }),
+  returnLoaner: (loanerId: string, fuel: string, damage: string | null) => set(s => {
+    const loaner = s.loanerFleet.find(l => l.id === loanerId)
+    if (!loaner) return s
+    const status: LoanerStatus = damage ? "maintenance" : "available"
+    const nextFleet = s.loanerFleet.map(l => l.id === loanerId ? { ...l, status, roId: null, fuel, damage, odoIn: (l.odoOut ?? 0) + Math.floor(Math.random()*40+8) } : l)
+    // clear RO link if was on loan
+    const linkedRo = loaner.roId
+    const nextROs = linkedRo ? s.repairOrders.map(r => (r as unknown as { loanerVehicleId?: string }).loanerVehicleId === loanerId ? { ...(r as unknown as Record<string, unknown>), loanerVehicleId: undefined, loanerReturnedAt: new Date().toISOString(), loanerFuel: fuel, loanerDamage: damage } as unknown as typeof r : r) as unknown as typeof s.repairOrders : s.repairOrders
+    return { loanerFleet: nextFleet, repairOrders: nextROs }
+  }),
+  updateLoanerAgreement: (loanerId: string, fuel: string, damage: string | null) => set(s => ({
+    loanerFleet: s.loanerFleet.map(l => l.id === loanerId ? { ...l, fuel, damage } : l)
+  })),
+  dispatchShuttle: (rideId: string) => set(s => ({
+    shuttleRides: s.shuttleRides.map(r => r.id === rideId ? { ...r, status: "en_route" as const } : r)
+  })),
+  completeShuttle: (rideId: string) => set(s => ({
+    shuttleRides: s.shuttleRides.map(r => r.id === rideId ? { ...r, status: "completed" as const } : r)
+  })),
+  addTireSetToRO: (tireSetId: string, roId: string) => set(s => {
+    const ts = s.tireSets.find(t => t.id === tireSetId)
+    if (!ts || ts.stock <= 0) return s
+    const nextSets = s.tireSets.map(t => t.id === tireSetId ? { ...t, stock: Math.max(0, t.stock - 1) } : t)
+    const nowIso = new Date().toISOString()
+    const log: ComplianceAuditEntry = { at: nowIso, actor: "service.lane@autocore", action: `POST /v1/tire-sets/${tireSetId} → RO ${roId} $${ts.price}`, resource: `tire:${tireSetId}`, result: "success" as const, ip: "10.2.14.30" }
+    return {
+      tireSets: nextSets,
+      repairOrders: s.repairOrders.map(r => {
+        if (r.id !== roId) return r
+        const mpiItems = (r as unknown as { mpiItems: unknown[] }).mpiItems as unknown as Record<string, unknown>[]
+        const exists = mpiItems.some(m => (m as { id: string }).id === `TIRE-${tireSetId}-${roId}`)
+        if (exists) return r
+        const newItem = {
+          id: `TIRE-${tireSetId}-${roId}`,
+          category: "tire" as const,
+          item: `Tire Set ${ts.size} — ${ts.fitment}`,
+          status: "red" as const,
+          measurement: ts.size,
+          spec: `${ts.includes} • VIN ${ts.vin} fitment verified`,
+          recommendation: `${ts.includes} — EV-weighted ${ts.evWeighted ? "47% EV visits tire-related §4.5" : "standard"} • $899 set + mount/balance`,
+          laborOp: "TIRE-SET-01",
+          partsRequired: [ts.id],
+          laborHours: 1.0,
+          retailAmount: ts.price,
+          photoUrl: `https://picsum.photos/seed/tire-${ts.size.replace(/[^a-z0-9]/gi,"")}/600/400`,
+          approved: true,
+        }
+        const nextMpi = [...(r.mpiItems as unknown as unknown[]), newItem] as unknown as typeof r.mpiItems
+        const nextTotal = (r.total ?? 0) + ts.price
+        return { ...r, mpiItems: nextMpi, status: "waiting_approval" as unknown as typeof r.status, total: nextTotal, partsTotal: (r.partsTotal ?? 0) + ts.price } as unknown as typeof r
+      }) as unknown as typeof s.repairOrders,
+      complianceState: { ...s.complianceState, accessLogs: [log, ...s.complianceState.accessLogs].slice(0, 50) },
+    }
   }),
   payVendor: (id: string) => set(s => {
     const nowIso = new Date().toISOString()
