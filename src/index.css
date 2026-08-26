@@ -1,0 +1,337 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────
+   AutoCore ERP — Taste-guided Design Tokens
+   Direction: Trust-first · Linear-clean + Bloomberg density
+   Palette: Zinc neutrals + Cobalt accent #0F62FE · off-black zinc-950
+   Typography: Geist / system · Mono for numbers
+   Variance 6 / Motion 4 / Density 5
+   ────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-xl: var(--radius-xl);
+  --radius-lg: var(--radius-lg);
+  --radius-md: var(--radius-md);
+}
+
+:root {
+  /* Surfaces — Zinc neutral ladder */
+  --bg: #fafafa; /* zinc-50 — app canvas */
+  --surface: #ffffff; /* white — cards, topbar */
+  --surface-hover: #f4f4f5; /* zinc-100 */
+  --surface-muted: #f4f4f5;
+  --surface-raised: #ffffff;
+
+  /* Borders */
+  --border: #e4e4e7; /* zinc-200 */
+  --border-strong: #d4d4d8; /* zinc-300 */
+  --border-subtle: #f4f4f5; /* zinc-100 */
+
+  /* Text — zinc-950 off-black hierarchy */
+  --text-primary: #09090b; /* zinc-950 */
+  --text-secondary: #52525b; /* zinc-600 */
+  --text-muted: #71717a; /* zinc-500 */
+  --text-faint: #a1a1aa; /* zinc-400 */
+  --text-inverse: #fafafa;
+
+  /* Accent — single Cobalt, no gradients */
+  --accent: #0f62fe;
+  --accent-hover: #0353e9;
+  --accent-active: #002d9c;
+  --accent-foreground: #ffffff;
+  --accent-muted: #edf2ff;
+  --accent-border: #c6d6ff;
+
+  /* Semantic */
+  --success: #0e7a41;
+  --success-muted: #e6f4ec;
+  --warning: #b95000;
+  --danger: #dc2626;
+
+  /* Typography */
+  --font-sans: "Geist", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
+
+  /* Shape — lock: rounded-xl or 0 */
+  --radius-xl: 12px;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+  --radius-0: 0px;
+
+  /* Layout */
+  --topbar-height: 52px;
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 64px;
+
+  /* Shadows — restrained, not glowy */
+  --shadow-sm: 0 1px 2px rgba(9, 9, 11, 0.06);
+  --shadow-md: 0 4px 12px rgba(9, 9, 11, 0.07), 0 1px 3px rgba(9, 9, 11, 0.08);
+  --shadow-none: none;
+
+  color-scheme: light;
+}
+
+/* Dark — sidebar only is dark; keep root light for app.
+   Optional .dark on html for full dark if needed */
+.dark {
+  --bg: #09090b;
+  --surface: #18181b;
+  --surface-hover: #27272a;
+  --surface-muted: #27272a;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  color-scheme: dark;
+}
+
+/* ── Base reset ── */
+*,
+*::before,
+*::after {
+  border-color: var(--border);
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+/* Mono for numbers — tabular, tight */
+.font-mono,
+.tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+/* Headings — tight, off-black */
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Focus — single accent ring */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-muted);
+  color: var(--text-primary);
+}
+
+/* ── Scrollbar — thin, zinc, no purple ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+.dark * {
+  scrollbar-color: #3f3f46 transparent;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+}
+
+/* ── Motion — restrained (level 4) ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Motion utils */
+.motion-fade-in {
+  animation: fadeIn 160ms ease-out;
+}
+
+.motion-slide-in {
+  animation: slideIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transition-taste {
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.transition-colors-taste {
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+
+/* ── Grid — 12-col enterprise — tight gutters ── */
+.grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .grid-12 {
+    gap: 20px;
+  }
+}
+
+.grid-bento {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* Bloomberg-style dense data grid */
+.data-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.data-grid > * {
+  background: var(--surface);
+}
+
+/* ── Surfaces helpers ── */
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+.surface-hover:hover {
+  background: var(--surface-hover);
+}
+
+/* ── Typography scale ── */
+.text-display {
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-weight: 650;
+}
+
+.text-title {
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.text-label-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.text-caption {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ── Dividers ── */
+.divider-h {
+  height: 1px;
+  background: var(--border);
+  width: 100%;
+}
+
+.divider-v {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+}
+
+/* ── Shimmer removed — no AI glow ── */
+/* Intentionally no gradients, no purple, no glow utilities */
