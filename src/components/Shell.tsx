@@ -26,17 +26,34 @@ import {
 } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
-import CommandCenter from "@/features/CommandCenter"
-import Inventory from "@/features/Inventory"
-import Desking from "@/features/Desking"
-import CRMInbox from "@/features/CRMInbox"
-import ServiceLane from "@/features/ServiceLane"
-import PartsCounter from "@/features/PartsCounter"
-import AccountingClose from "@/features/AccountingClose"
-import DeveloperPortal from "@/features/DeveloperPortal"
-import AIAgents from "@/features/AIAgents"
-import MigrationWorkbench from "@/features/MigrationWorkbench"
-import F1Flow from "@/features/F1Flow"
+
+// ── Code-split: React.lazy + dynamic import() per route (prod readiness: 1.52MB → ~180KB per route) ──
+const CommandCenter = React.lazy(() => import("@/features/CommandCenter"))
+const Inventory = React.lazy(() => import("@/features/Inventory"))
+const Desking = React.lazy(() => import("@/features/Desking"))
+const CRMInbox = React.lazy(() => import("@/features/CRMInbox"))
+const ServiceLane = React.lazy(() => import("@/features/ServiceLane"))
+const PartsCounter = React.lazy(() => import("@/features/PartsCounter"))
+const AccountingClose = React.lazy(() => import("@/features/AccountingClose"))
+const DeveloperPortal = React.lazy(() => import("@/features/DeveloperPortal"))
+const AIAgents = React.lazy(() => import("@/features/AIAgents"))
+const MigrationWorkbench = React.lazy(() => import("@/features/MigrationWorkbench"))
+const F1Flow = React.lazy(() => import("@/features/F1Flow"))
+
+function ViewSkeleton() {
+  return (
+    <div className="mx-auto max-w-[1440px] p-6 animate-pulse">
+      <div className="h-6 w-48 rounded bg-zinc-200 mb-4" />
+      <div className="h-4 w-80 rounded bg-zinc-100 mb-6" />
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="h-32 rounded-xl bg-white border border-zinc-200" />
+        <div className="h-32 rounded-xl bg-white border border-zinc-200" />
+        <div className="h-32 rounded-xl bg-white border border-zinc-200" />
+      </div>
+      <div className="mt-6 h-64 rounded-xl bg-white border border-zinc-200" />
+    </div>
+  )
+}
 
 // ──────────────────────────────────────────────────────────
 // Types
@@ -218,7 +235,7 @@ export function Shell({ children }: { children?: React.ReactNode }) {
                     "rounded-lg px-2.5 py-1 text-[12px] font-[500] leading-none tracking-tight transition-colors-taste whitespace-nowrap",
                     active
                       ? "bg-white text-zinc-900 shadow-sm border border-zinc-200"
-                      : "text-zinc-500 hover:text-zinc-900"
+                      : "text-zinc-600 hover:text-zinc-900"
                   )}
                   title={r}
                 >
@@ -234,24 +251,24 @@ export function Shell({ children }: { children?: React.ReactNode }) {
 
         {/* Right: search + SLA + actions + user */}
         <div className="flex items-center gap-2 lg:gap-3 shrink-0">
-          {/* Global search */}
+          {/* Global search — placeholder WCAG AA 4.83:1 (zinc-500 on white) */}
           <div className="relative hidden md:block">
             <MagnifyingGlass
               size={14}
               weight="bold"
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
             />
             <input
               placeholder="Search vehicles, deals, ROs…"
-              className="h-8 w-[260px] lg:w-[300px] rounded-xl border border-[var(--border-strong)] bg-white pl-8 pr-[62px] text-[13px] placeholder:text-zinc-400 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-muted)]"
+              className="h-8 w-[260px] lg:w-[300px] rounded-xl border border-[var(--border-strong)] bg-white pl-8 pr-[62px] text-[13px] text-zinc-900 placeholder:text-zinc-500 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-muted)]"
             />
-            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-500">
+            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-600">
               <Command size={10} weight="bold" />K
             </span>
           </div>
 
           {/* Mobile search icon */}
-          <button className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 md:hidden">
+          <button className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 md:hidden" aria-label="Search">
             <MagnifyingGlass size={18} />
           </button>
 
@@ -549,24 +566,26 @@ export function Shell({ children }: { children?: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Content slot */}
+          {/* Content slot — Suspense per route (skeleton fallback) */}
           {children ? (
             <div className="p-0">{children}</div>
           ) : (
-            <div className="min-w-0">
-              {activeId === "f1-flow" && <F1Flow />}
-              {activeId === "command-center" && <CommandCenter />}
-              {(activeId === "vehicles" || activeId === "transfers") && <Inventory />}
-              {(activeId === "showroom" || activeId === "fi-desk") && <Desking />}
-              {activeId === "crm-inbox" && <CRMInbox />}
-              {activeId === "service-lane" && <ServiceLane />}
-              {activeId === "parts-counter" && <PartsCounter />}
-              {activeId === "gl-close" && <AccountingClose />}
-              {(activeId === "developer" || activeId === "marketplace") && <DeveloperPortal />}
-              {activeId === "ai-agents" && <AIAgents />}
-              {activeId === "workbench" && <MigrationWorkbench />}
-              {!["f1-flow","command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","workbench"].includes(activeId) && <CommandCenter />}
-            </div>
+            <React.Suspense fallback={<ViewSkeleton />}>
+              <div className="min-w-0">
+                {activeId === "f1-flow" && <F1Flow />}
+                {activeId === "command-center" && <CommandCenter />}
+                {(activeId === "vehicles" || activeId === "transfers") && <Inventory />}
+                {(activeId === "showroom" || activeId === "fi-desk") && <Desking />}
+                {activeId === "crm-inbox" && <CRMInbox />}
+                {activeId === "service-lane" && <ServiceLane />}
+                {activeId === "parts-counter" && <PartsCounter />}
+                {activeId === "gl-close" && <AccountingClose />}
+                {(activeId === "developer" || activeId === "marketplace") && <DeveloperPortal />}
+                {activeId === "ai-agents" && <AIAgents />}
+                {activeId === "workbench" && <MigrationWorkbench />}
+                {!["f1-flow","command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","workbench"].includes(activeId) && <CommandCenter />}
+              </div>
+            </React.Suspense>
           )}
         </main>
       </div>

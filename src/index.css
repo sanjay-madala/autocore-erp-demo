@@ -43,11 +43,11 @@
   --border-strong: #d4d4d8; /* zinc-300 */
   --border-subtle: #f4f4f5; /* zinc-100 */
 
-  /* Text — zinc-950 off-black hierarchy */
-  --text-primary: #09090b; /* zinc-950 */
-  --text-secondary: #52525b; /* zinc-600 */
-  --text-muted: #71717a; /* zinc-500 */
-  --text-faint: #a1a1aa; /* zinc-400 */
+  /* Text — zinc-950 off-black hierarchy — WCAG AA 4.5:1 enforced */
+  --text-primary: #09090b; /* zinc-950 — 21:1 on white */
+  --text-secondary: #27272a; /* zinc-800 — 15.7:1 on white, 6.8:1 on zinc-100 */
+  --text-muted: #52525b; /* zinc-600 — 7.73:1 on white, 7.03:1 on #f4f4f5 (was #71717a 4.40 FAIL) */
+  --text-faint: #71717a; /* zinc-500 — 4.83:1 on white (was #a1a1aa 2.56 FAIL) — minimal faint that still passes AA */
   --text-inverse: #fafafa;
 
   /* Accent — single Cobalt, no gradients */
@@ -58,11 +58,12 @@
   --accent-muted: #edf2ff;
   --accent-border: #c6d6ff;
 
-  /* Semantic */
-  --success: #0e7a41;
+  /* Semantic — WCAG AA 4.5:1 */
+  --success: #0e7a41; /* 4.77:1 on #e6f4ec, 5.67:1 on white */
   --success-muted: #e6f4ec;
-  --warning: #b95000;
-  --danger: #dc2626;
+  --warning: #92400e; /* amber-800 — 6.84:1 on #fffbeb, 7.31:1 on white (was #b95000 borderline) */
+  --warning-muted: #fffbeb;
+  --danger: #b91c1c; /* red-700 — 6.3:1 on white (was #dc2626 4.63 borderline for small) */
 
   /* Typography */
   --font-sans: "Geist", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",

@@ -83,6 +83,54 @@ export type SystemHealth = {
   incidentReportPublished: boolean
 }
 
+// ── F10 Migration Workbench ──
+export type MigrationExtractorStatus = "done" | "progress" | "queued"
+export type MigrationExtractor = {
+  id: string
+  name: string
+  src: string
+  status: MigrationExtractorStatus
+  coverage: string
+  pct: number
+  note: string
+}
+export type MigrationMappingRow = {
+  field: string
+  source: string
+  target: string
+  score: string
+  scoreNum: number
+  issues: number
+  status: "ok" | "warn"
+}
+export type MigrationVerification = {
+  trialBalance: number
+  binsExact: number
+  status: "PASS" | "FAIL"
+  verifiedAt: string | null
+  jeValidated: string
+}
+export type MigrationParallelDay = {
+  day: number
+  parity: number | null
+  height: number
+}
+export type MigrationCutover = {
+  scheduledAt: string | null
+  executedAt: string | null
+  status: "scheduled" | "live" | "rolled_back"
+}
+export type MigrationState = {
+  extractors: MigrationExtractor[]
+  mappingRows: MigrationMappingRow[]
+  mapping: MigrationMappingRow[]
+  verification: MigrationVerification
+  parallelRun: { days: MigrationParallelDay[]; currentDay: number }
+  cutover: MigrationCutover
+  parallelDays: number
+  cutoverScheduledAt: string | null
+}
+
 // ── F8 Multi-rooftop Close + F14 Incentives ──
 export type RooftopMeta = { id: "dtown"|"north"|"westside"; name: string; brand: string; oemFormat: string; region: string }
 export const groupMeta = {
@@ -155,6 +203,8 @@ export type AppState = {
   parts: typeof seedParts
   aiCalls: VoiceCall[]
   systemHealth: SystemHealth
+  migration: MigrationState
+  migrationState: MigrationState
   // F1
   createDealFromLead: (customerName: string, vin: string) => string
   updatePencil: (dealId: string, pencil: F1Deal["pencil"]) => void
@@ -204,6 +254,13 @@ export type AppState = {
   submitIncentiveClaim: (claimId: string) => void
   reconcileIncentiveClaim: (claimId: string, status: IncentiveClaimStatus) => void
   getGroupConsolidation: () => { rows: GroupConsolidationRow[]; group: GroupConsolidationRow; eliminations: number; transferDetails: { vin: string; stockNo: string; from: string; to: string; at: string }[] }
+  // F10 Migration
+  runExtractor: (id: string) => void
+  fixMapping: (field: string) => void
+  verifyLoad: () => void
+  advanceParallelDay: () => void
+  executeCutover: () => void
+  rollback: () => void
 }
 
 const now = () => new Date().toISOString().slice(11,19)
@@ -406,6 +463,76 @@ export const useStore = create<AppState>((set, get)=> ({
     lastFailoverAt: null,
     incidentReportPublished: false,
   } as SystemHealth,
+  migration: {
+    extractors: [
+      { id: "cdk", name: "CDK Drive", src: "CDK", status: "done" as const, coverage: "GL history • customers • vehicles • bins/on-order • open ROs/deals • employees • 15k rooftops", pct: 98.4, note: "15,000 rooftops post-outage" },
+      { id: "reynolds", name: "Reynolds ERA-IGNITE", src: "Reynolds", status: "progress" as const, coverage: "Same domains • ERA formats • 10k rooftops", pct: 87, note: "Mapping workbench • RCI bypass" },
+      { id: "tekion", name: "Tekion ARC", src: "Tekion", status: "queued" as const, coverage: "Defensive churn capture", pct: 12, note: "Queued • after CDK/Reynolds" },
+    ],
+    mappingRows: [
+      { field: "Customers", source: "CDK CRM", target: "M-xxx shared file", score: "98.4%", scoreNum: 98.4, issues: 3, status: "ok" as const },
+      { field: "Vehicles", source: "CDK Inventory", target: "VIN master", score: "99.1%", scoreNum: 99.1, issues: 1, status: "ok" as const },
+      { field: "Chart of Accounts", source: "CDK GL", target: "OEM-mapped COA", score: "96.2%", scoreNum: 96.2, issues: 7, status: "warn" as const },
+      { field: "Parts bins/on-hand", source: "CDK Parts", target: "Bin location matrix", score: "99.2%", scoreNum: 99.2, issues: 0, status: "ok" as const },
+      { field: "Open ROs", source: "CDK Service", target: "RO state machine", score: "97.8%", scoreNum: 97.8, issues: 2, status: "warn" as const },
+      { field: "Open deals / CIT", source: "CDK Deals", target: "Deal object", score: "98.9%", scoreNum: 98.9, issues: 1, status: "ok" as const },
+    ],
+    mapping: [
+      { field: "Customers", source: "CDK CRM", target: "M-xxx shared file", score: "98.4%", scoreNum: 98.4, issues: 3, status: "ok" as const },
+      { field: "Vehicles", source: "CDK Inventory", target: "VIN master", score: "99.1%", scoreNum: 99.1, issues: 1, status: "ok" as const },
+      { field: "Chart of Accounts", source: "CDK GL", target: "OEM-mapped COA", score: "96.2%", scoreNum: 96.2, issues: 7, status: "warn" as const },
+      { field: "Parts bins/on-hand", source: "CDK Parts", target: "Bin location matrix", score: "99.2%", scoreNum: 99.2, issues: 0, status: "ok" as const },
+      { field: "Open ROs", source: "CDK Service", target: "RO state machine", score: "97.8%", scoreNum: 97.8, issues: 2, status: "warn" as const },
+      { field: "Open deals / CIT", source: "CDK Deals", target: "Deal object", score: "98.9%", scoreNum: 98.9, issues: 1, status: "ok" as const },
+    ],
+    verification: { trialBalance: 0, binsExact: 1204, status: "PASS" as const, verifiedAt: new Date().toISOString(), jeValidated: "JE-20441 validated" },
+    parallelRun: {
+      currentDay: 9,
+      days: Array.from({ length: 14 }, (_, i) => {
+        const heights = [62,58,71,68,75,80,77,82,69,74,78,85,0,0]
+        const parity = i < 9 ? 100 : null
+        return { day: i+1, parity, height: heights[i] }
+      }),
+    },
+    cutover: { scheduledAt: new Date(Date.now() + 86400000*2).toISOString(), executedAt: null, status: "scheduled" as const },
+    parallelDays: 9,
+    cutoverScheduledAt: new Date(Date.now() + 86400000*2).toISOString(),
+  },
+  migrationState: {
+    extractors: [
+      { id: "cdk", name: "CDK Drive", src: "CDK", status: "done" as const, coverage: "GL history • customers • vehicles • bins/on-order • open ROs/deals • employees • 15k rooftops", pct: 98.4, note: "15,000 rooftops post-outage" },
+      { id: "reynolds", name: "Reynolds ERA-IGNITE", src: "Reynolds", status: "progress" as const, coverage: "Same domains • ERA formats • 10k rooftops", pct: 87, note: "Mapping workbench • RCI bypass" },
+      { id: "tekion", name: "Tekion ARC", src: "Tekion", status: "queued" as const, coverage: "Defensive churn capture", pct: 12, note: "Queued • after CDK/Reynolds" },
+    ],
+    mappingRows: [
+      { field: "Customers", source: "CDK CRM", target: "M-xxx shared file", score: "98.4%", scoreNum: 98.4, issues: 3, status: "ok" as const },
+      { field: "Vehicles", source: "CDK Inventory", target: "VIN master", score: "99.1%", scoreNum: 99.1, issues: 1, status: "ok" as const },
+      { field: "Chart of Accounts", source: "CDK GL", target: "OEM-mapped COA", score: "96.2%", scoreNum: 96.2, issues: 7, status: "warn" as const },
+      { field: "Parts bins/on-hand", source: "CDK Parts", target: "Bin location matrix", score: "99.2%", scoreNum: 99.2, issues: 0, status: "ok" as const },
+      { field: "Open ROs", source: "CDK Service", target: "RO state machine", score: "97.8%", scoreNum: 97.8, issues: 2, status: "warn" as const },
+      { field: "Open deals / CIT", source: "CDK Deals", target: "Deal object", score: "98.9%", scoreNum: 98.9, issues: 1, status: "ok" as const },
+    ],
+    mapping: [
+      { field: "Customers", source: "CDK CRM", target: "M-xxx shared file", score: "98.4%", scoreNum: 98.4, issues: 3, status: "ok" as const },
+      { field: "Vehicles", source: "CDK Inventory", target: "VIN master", score: "99.1%", scoreNum: 99.1, issues: 1, status: "ok" as const },
+      { field: "Chart of Accounts", source: "CDK GL", target: "OEM-mapped COA", score: "96.2%", scoreNum: 96.2, issues: 7, status: "warn" as const },
+      { field: "Parts bins/on-hand", source: "CDK Parts", target: "Bin location matrix", score: "99.2%", scoreNum: 99.2, issues: 0, status: "ok" as const },
+      { field: "Open ROs", source: "CDK Service", target: "RO state machine", score: "97.8%", scoreNum: 97.8, issues: 2, status: "warn" as const },
+      { field: "Open deals / CIT", source: "CDK Deals", target: "Deal object", score: "98.9%", scoreNum: 98.9, issues: 1, status: "ok" as const },
+    ],
+    verification: { trialBalance: 0, binsExact: 1204, status: "PASS" as const, verifiedAt: new Date().toISOString(), jeValidated: "JE-20441 validated" },
+    parallelRun: {
+      currentDay: 9,
+      days: Array.from({ length: 14 }, (_, i) => {
+        const heights = [62,58,71,68,75,80,77,82,69,74,78,85,0,0]
+        const parity = i < 9 ? 100 : null
+        return { day: i+1, parity, height: heights[i] }
+      }),
+    },
+    cutover: { scheduledAt: new Date(Date.now() + 86400000*2).toISOString(), executedAt: null, status: "scheduled" as const },
+    parallelDays: 9,
+    cutoverScheduledAt: new Date(Date.now() + 86400000*2).toISOString(),
+  },
   // ── F1 ──
   setActiveDeal: (id)=> set({ activeDealId: id }),
   createDealFromLead: (name, vin) => {
@@ -819,4 +946,100 @@ export const useStore = create<AppState>((set, get)=> ({
     incentiveClaims: (s.incentiveClaims as IncentiveClaim[]).map(c=> c.id===claimId ? { ...c, status, paidAt: status==="paid"? new Date().toISOString(): c.paidAt, oemResponse: status==="paid"? "Paid — reconciled to AR schedule": status==="mismatch"? c.mismatchReason||"Mismatch — OEM short-paid" : c.oemResponse } : c)
   })),
   getGroupConsolidation: () => computeConsolidation(get().vehicles as typeof seedVehicles, get().deals, get().repairOrders as typeof seedROs, get().parts as typeof seedParts),
+  // ── F10 Migration Workbench ──
+  runExtractor: (id: string)=> {
+    const ext = get().migration.extractors.find(e=> e.id===id)
+    if(!ext) return
+    if(ext.status==="done" && ext.pct>=98.4) return
+    set(s=>{
+      const upd = (list: MigrationExtractor[]) => list.map(e=> e.id===id ? { ...e, status: "progress" as const } : e)
+      return {
+        migration: { ...s.migration, extractors: upd(s.migration.extractors) },
+        migrationState: { ...s.migrationState, extractors: upd(s.migrationState.extractors) },
+      }
+    })
+    const start = ext.pct
+    const target = 98.4
+    const duration = 1100
+    const steps = 22
+    let step = 0
+    const interval = setInterval(()=>{
+      step++
+      const progress = step/steps
+      const current = start + (target - start) * progress
+      const pct = step===steps ? target : Math.round(current*10)/10
+      const done = pct>=98.4
+      set(s=>{
+        const upd = (list: MigrationExtractor[]) => list.map(e=> e.id===id ? { ...e, pct, status: done ? "done" as const : "progress" as const, note: done ? "Completed • verified 98.4% coverage" : e.note } : e)
+        return {
+          migration: { ...s.migration, extractors: upd(s.migration.extractors) },
+          migrationState: { ...s.migrationState, extractors: upd(s.migrationState.extractors) },
+        }
+      })
+      if(step>=steps) clearInterval(interval)
+    }, duration/steps)
+  },
+  fixMapping: (field: string)=> set(s=>{
+    const fix = (list: MigrationMappingRow[]) => list.map(r=> r.field===field ? { ...r, score: "99.1%", scoreNum: 99.1, issues: 0, status: "ok" as const } : r)
+    return {
+      migration: { ...s.migration, mappingRows: fix(s.migration.mappingRows), mapping: fix(s.migration.mapping) },
+      migrationState: { ...s.migrationState, mappingRows: fix(s.migrationState.mappingRows), mapping: fix(s.migrationState.mapping) },
+    }
+  }),
+  verifyLoad: ()=> set(s=>{
+    const v = { trialBalance: 0, binsExact: 1204, status: "PASS" as const, verifiedAt: new Date().toISOString(), jeValidated: "JE-20441 validated" }
+    return {
+      migration: { ...s.migration, verification: v },
+      migrationState: { ...s.migrationState, verification: v },
+    }
+  }),
+  advanceParallelDay: ()=> set(s=>{
+    const cur = s.migration.parallelRun.currentDay
+    if(cur>=14) return s
+    const next = cur+1
+    const updateDays = (days: MigrationParallelDay[]) => days.map(d=> d.day===next ? { ...d, parity: 100, height: 68 + Math.floor(Math.random()*17) } : d)
+    return {
+      migration: {
+        ...s.migration,
+        parallelRun: { currentDay: next, days: updateDays(s.migration.parallelRun.days) },
+        parallelDays: next,
+      },
+      migrationState: {
+        ...s.migrationState,
+        parallelRun: { currentDay: next, days: updateDays(s.migrationState.parallelRun.days) },
+        parallelDays: next,
+      },
+    }
+  }),
+  executeCutover: ()=> set(s=>{
+    const at = new Date().toISOString()
+    const cut = { scheduledAt: s.migration.cutover.scheduledAt, executedAt: at, status: "live" as const }
+    return {
+      migration: { ...s.migration, cutover: cut, cutoverScheduledAt: s.migration.cutoverScheduledAt },
+      migrationState: { ...s.migrationState, cutover: cut, cutoverScheduledAt: s.migrationState.cutoverScheduledAt },
+      vehicles: s.vehicles.map(v=> ({
+        // @ts-ignore transferHistory is dynamic per store transferVehicle
+        ...v,
+        history: [...(v.history||[]), { date: at.slice(0,10), event: "Cutover — CDK → AutoCore", user: "Migration Workbench", detail: `Live at ${at} • vehicles migrated` }],
+        transferHistory: [...(((v as unknown as { transferHistory?: unknown[] }).transferHistory)||[]), { from: "CDK", to: "AutoCore", at }],
+      } as unknown as typeof v)),
+    }
+  }),
+  rollback: ()=> set(s=>{
+    const cut = { scheduledAt: s.migration.cutover.scheduledAt, executedAt: null, status: "rolled_back" as const }
+    return {
+      migration: { ...s.migration, cutover: cut },
+      migrationState: { ...s.migrationState, cutover: cut },
+      vehicles: s.vehicles.map(v=> {
+        const hist = (v.history||[]).filter((h: { event:string })=> h.event !== "Cutover — CDK → AutoCore")
+        const thRaw = (v as unknown as { transferHistory?: {from:string;to:string;at:string}[] }).transferHistory
+        const filtered = Array.isArray(thRaw) ? thRaw.filter(t=> !(t.from==="CDK" && t.to==="AutoCore")) : undefined
+        const base: Record<string, unknown> = { ...v, history: hist }
+        if(filtered && filtered.length>0) base.transferHistory = filtered
+        else if(filtered && filtered.length===0) base.transferHistory = []
+        else if(thRaw) base.transferHistory = filtered
+        return base as unknown as typeof v
+      }),
+    }
+  }),
 }))
