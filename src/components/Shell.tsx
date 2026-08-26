@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   CaretUpDown,
   Lightning,
+  DeviceMobile,
 } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
@@ -39,6 +40,7 @@ const DeveloperPortal = React.lazy(() => import("@/features/DeveloperPortal"))
 const AIAgents = React.lazy(() => import("@/features/AIAgents"))
 const MigrationWorkbench = React.lazy(() => import("@/features/MigrationWorkbench"))
 const F1Flow = React.lazy(() => import("@/features/F1Flow"))
+const MobileApps = React.lazy(() => import("@/features/MobileApps"))
 
 function ViewSkeleton() {
   return (
@@ -59,6 +61,14 @@ function ViewSkeleton() {
 // Types
 // ──────────────────────────────────────────────────────────
 type Rooftop = "All" | "Downtown Toyota" | "North Ford" | "Westside Honda"
+type RooftopId = "group" | "dtown" | "north" | "westside"
+
+const ROOFTOP_OPTS: { id: RooftopId; label: Rooftop; short: string }[] = [
+  { id: "group", label: "All", short: "All" },
+  { id: "dtown", label: "Downtown Toyota", short: "DT Toyota" },
+  { id: "north", label: "North Ford", short: "North Ford" },
+  { id: "westside", label: "Westside Honda", short: "WS Honda" },
+]
 
 type NavItem = {
   id: string
@@ -112,7 +122,10 @@ const NAV: NavSection[] = [
   },
   {
     label: "INTELLIGENCE",
-    items: [{ id: "ai-agents", label: "AI Agents", icon: Robot }],
+    items: [
+      { id: "ai-agents", label: "AI Agents", icon: Robot },
+      { id: "mobile", label: "Mobile Apps", icon: DeviceMobile },
+    ],
   },
   {
     label: "MIGRATION",
@@ -120,7 +133,8 @@ const NAV: NavSection[] = [
   },
 ]
 
-const ROOFTOPS: Rooftop[] = ["All", "Downtown Toyota", "North Ford", "Westside Honda"]
+const ROOFTOPS: Rooftop[] = ["All", "Downtown Toyota", "North Ford", "Westside Honda"] as const
+// legacy alias — use ROOFTOP_OPTS as source of truth
 
 // ──────────────────────────────────────────────────────────
 // Geometric A — minimal, machined
@@ -160,7 +174,8 @@ export function Shell({ children }: { children?: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false)
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [activeId, setActiveId] = React.useState<string>("f1-flow")
-  const [rooftop, setRooftop] = React.useState<Rooftop>("All")
+  const selectedRooftop = useStore(s=> s.selectedRooftop)
+  const setSelectedRooftop = useStore(s=> s.setSelectedRooftop)
   const systemHealth = useStore(s=> s.systemHealth)
   const degraded = systemHealth.degraded
 
@@ -222,24 +237,24 @@ export function Shell({ children }: { children?: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Rooftop selector — segmented */}
+          {/* Rooftop selector — segmented — LIVE: Shell drives store.selectedRooftop → CommandCenter filters via useStore */}
           <div className="hidden lg:flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 ml-1">
-            {ROOFTOPS.map((r) => {
-              const active = r === rooftop
-              const label = r === "All" ? "All" : r.replace("Downtown ", "DT ").replace("Westside ", "WS ")
+            {ROOFTOP_OPTS.map((opt) => {
+              const active = opt.id === selectedRooftop
               return (
                 <button
-                  key={r}
-                  onClick={() => setRooftop(r)}
+                  key={opt.id}
+                  onClick={() => setSelectedRooftop(opt.id)}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-[12px] font-[500] leading-none tracking-tight transition-colors-taste whitespace-nowrap",
                     active
                       ? "bg-white text-zinc-900 shadow-sm border border-zinc-200"
                       : "text-zinc-600 hover:text-zinc-900"
                   )}
-                  title={r}
+                  title={opt.label}
+                  aria-pressed={active}
                 >
-                  {label}
+                  {opt.short}
                 </button>
               )
             })}
@@ -473,16 +488,16 @@ export function Shell({ children }: { children?: React.ReactNode }) {
 
               <div className="p-3">
                 <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
-                  {ROOFTOPS.slice(0, 3).map((r) => (
+                  {ROOFTOP_OPTS.slice(0, 3).map((opt) => (
                     <button
-                      key={r}
-                      onClick={() => setRooftop(r)}
+                      key={opt.id}
+                      onClick={() => setSelectedRooftop(opt.id)}
                       className={cn(
                         "flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium",
-                        r === rooftop ? "bg-white text-zinc-900" : "text-zinc-400"
+                        opt.id === selectedRooftop ? "bg-white text-zinc-900" : "text-zinc-400"
                       )}
                     >
-                      {r === "All" ? "All" : r.split(" ")[0]}
+                      {opt.short.split(" ")[0]}
                     </button>
                   ))}
                 </div>
@@ -545,22 +560,22 @@ export function Shell({ children }: { children?: React.ReactNode }) {
 
         {/* ── Main ── */}
         <main className="min-w-0 flex-1 bg-[var(--bg)]">
-          {/* Rooftop bar — mobile only, secondary */}
+          {/* Rooftop bar — mobile only, secondary — LIVE drives store */}
           <div className="flex items-center gap-2 border-b border-[var(--border)] bg-white px-3 py-2 lg:hidden">
             <span className="font-mono text-[10px] tracking-widest text-zinc-500">ROOFTOP</span>
             <div className="flex flex-1 gap-1 overflow-x-auto">
-              {ROOFTOPS.map((r) => (
+              {ROOFTOP_OPTS.map((opt) => (
                 <button
-                  key={r}
-                  onClick={() => setRooftop(r)}
+                  key={opt.id}
+                  onClick={() => setSelectedRooftop(opt.id)}
                   className={cn(
                     "whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium",
-                    r === rooftop
+                    opt.id === selectedRooftop
                       ? "border-zinc-900 bg-zinc-900 text-white"
                       : "border-zinc-200 bg-white text-zinc-600"
                   )}
                 >
-                  {r}
+                  {opt.label}
                 </button>
               ))}
             </div>
@@ -582,8 +597,9 @@ export function Shell({ children }: { children?: React.ReactNode }) {
                 {activeId === "gl-close" && <AccountingClose />}
                 {(activeId === "developer" || activeId === "marketplace") && <DeveloperPortal />}
                 {activeId === "ai-agents" && <AIAgents />}
+                {activeId === "mobile" && <MobileApps />}
                 {activeId === "workbench" && <MigrationWorkbench />}
-                {!["f1-flow","command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","workbench"].includes(activeId) && <CommandCenter />}
+                {!["f1-flow","command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","mobile","workbench"].includes(activeId) && <CommandCenter />}
               </div>
             </React.Suspense>
           )}

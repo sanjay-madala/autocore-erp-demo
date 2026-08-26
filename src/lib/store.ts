@@ -4,6 +4,7 @@ import { customers as seedCustomers } from "@/data/customers"
 import { leads as seedLeads } from "@/data/leads"
 import { serviceAppointments as seedAppts, repairOrders as seedROs, technicians as seedTechs } from "@/data/service"
 import { parts as seedParts } from "@/data/parts"
+import { kpiDaily as seedKpiDaily } from "@/data/analytics"
 
 // ── Types — single data model per SPEC E1-T03 STAR-aligned ──
 export type DealStage = "lead" | "appointment" | "pencil" | "desked" | "credit" | "menu" | "contract" | "funded" | "delivered"
@@ -16,6 +17,9 @@ export type F1Deal = {
   stockNo: string
   rooftop: string
   stage: DealStage
+  createdAt: string
+  updatedAt: string
+  deliveredAt: string | null
   pencil: { price: number; rate: number; term: number; down: number; tax: number; fees: number; monthly: number; gross: number } | null
   trade: { acv: number; payoff: number; allowance: number } | null
   credit: { bureau: number; decision: "pending"|"approved"|"declined"|"conditioned"; lender: string } | null
@@ -203,6 +207,8 @@ export type AppState = {
   parts: typeof seedParts
   aiCalls: VoiceCall[]
   systemHealth: SystemHealth
+  selectedRooftop: "group" | "dtown" | "north" | "westside"
+  lastPostedAt: string | null
   migration: MigrationState
   migrationState: MigrationState
   // F1
@@ -247,6 +253,8 @@ export type AppState = {
   setDegraded: (v: boolean) => void
   toggleDegraded: () => void
   publishPostIncidentReport: () => void
+  // E11 — Analytics & Reporting realtime
+  setSelectedRooftop: (r: "group" | "dtown" | "north" | "westside") => void
   // F8/F14
   groupMeta: typeof groupMeta
   incentiveRules: IncentiveRule[]
@@ -254,6 +262,7 @@ export type AppState = {
   submitIncentiveClaim: (claimId: string) => void
   reconcileIncentiveClaim: (claimId: string, status: IncentiveClaimStatus) => void
   getGroupConsolidation: () => { rows: GroupConsolidationRow[]; group: GroupConsolidationRow; eliminations: number; transferDetails: { vin: string; stockNo: string; from: string; to: string; at: string }[] }
+  getLiveKpiDaily: () => import("@/data/analytics").KpiPoint[]
   // F10 Migration
   runExtractor: (id: string) => void
   fixMapping: (field: string) => void
@@ -267,9 +276,13 @@ const now = () => new Date().toISOString().slice(11,19)
 
 const makeDeal = (id: string, name: string, vin: string): F1Deal => {
   const v = seedVehicles.find(x=>x.vin===vin) || seedVehicles[0]
+  const ts = new Date().toISOString()
   return {
     id, customerId: seedCustomers[0]?.id || "CUS-001", customerName: name, vin: v.vin, vehicleLabel: `${v.year} ${v.make} ${v.model} ${v.trim}`, stockNo: v.stockNo, rooftop: v.rooftopId,
     stage: "lead",
+    createdAt: ts,
+    updatedAt: ts,
+    deliveredAt: null,
     pencil: null, trade: { acv: 18200, payoff: 14100, allowance: 17500 }, credit: { bureau: 742, decision: "pending", lender: "Dealertrack" },
     fiMenu: { VSC: false, GAP: false, Tire: false, Dent: false },
     funding: { status: "draft", cit: null, depositPaid: false, depositAmount: null, depositMethod: null }, glPosted: false,
@@ -386,10 +399,16 @@ function computeConsolidation(vehicles: typeof seedVehicles, deals: F1Deal[], re
 export const useStore = create<AppState>((set, get)=> ({
   vehicles: seedVehicles,
   customers: seedCustomers,
-  deals: [
-    makeDeal("D-1041", "Marcus Chen", seedVehicles[0].vin),
-    { ...makeDeal("D-1042", "Priya Nair", seedVehicles[2].vin), stage: "desked", pencil: { price: 48200, rate: 6.49, term: 72, down: 3000, tax: 1890, fees: 489, monthly: 612, gross: 2410 } },
-  ],
+  deals: (() => {
+    const d1 = { ...makeDeal("D-1041", "Marcus Chen", seedVehicles[0].vin), stage: "lead" as DealStage, createdAt: new Date(Date.now() - 1000*60*62*24*2).toISOString(), updatedAt: new Date(Date.now() - 1000*60*62*24*2).toISOString() }
+    const d2 = { ...makeDeal("D-1042", "Priya Nair", seedVehicles[2].vin), stage: "desked" as DealStage, pencil: { price: 48200, rate: 6.49, term: 72, down: 3000, tax: 1890, fees: 489, monthly: 612, gross: 2410 }, createdAt: new Date(Date.now() - 1000*60*60*24*6).toISOString(), updatedAt: new Date(Date.now() - 1000*60*60*24*6).toISOString() }
+    // additional seeded delivered deals for E11 velocity — spread across rooftops/weeks
+    const d3 = { ...makeDeal("D-1043", "Aaliyah Johnson", seedVehicles[3].vin), stage: "delivered" as DealStage, pencil: { price: 36490, rate: 6.49, term: 72, down: 3000, tax: 1890, fees: 489, monthly: 612, gross: 3420 }, createdAt: new Date(Date.now() - 1000*60*60*24*10).toISOString(), updatedAt: new Date(Date.now() - 1000*60*60*24*1).toISOString(), deliveredAt: new Date(Date.now() - 1000*60*60*24*1).toISOString(), glPosted: true } as F1Deal
+    const d4 = { ...makeDeal("D-1044", "Robert Owens", seedVehicles[8].vin), stage: "delivered" as DealStage, rooftop: "north" as string, pencil: { price: 53490, rate: 6.49, term: 60, down: 5000, tax: 2100, fees: 599, monthly: 789, gross: 2890 }, createdAt: new Date(Date.now() - 1000*60*60*24*14).toISOString(), updatedAt: new Date(Date.now() - 1000*60*42).toISOString(), deliveredAt: new Date(Date.now() - 42*1000).toISOString(), glPosted: true } as F1Deal
+    const d5 = { ...makeDeal("D-1045", "Kenji Tanaka", seedVehicles[16].vin), stage: "delivered" as DealStage, rooftop: "westside" as string, pencil: { price: 40750, rate: 5.99, term: 60, down: 5000, tax: 1890, fees: 489, monthly: 589, gross: 2680 }, createdAt: new Date(Date.now() - 1000*60*60*24*18).toISOString(), updatedAt: new Date(Date.now() - 1000*60*60*24*3).toISOString(), deliveredAt: new Date(Date.now() - 1000*60*60*2).toISOString(), glPosted: true } as F1Deal
+    // ensure delivered deals have correct rooftop lineage from vehicle but override for demo diversity already set
+    return [d1, d2, d3, d4, d5]
+  })(),
   activeDealId: "D-1041",
   leads: seedLeads,
   serviceAppointments: seedAppts,
@@ -463,6 +482,8 @@ export const useStore = create<AppState>((set, get)=> ({
     lastFailoverAt: null,
     incidentReportPublished: false,
   } as SystemHealth,
+  selectedRooftop: "group" as const,
+  lastPostedAt: new Date(Date.now() - 42 * 1000).toISOString(),
   migration: {
     extractors: [
       { id: "cdk", name: "CDK Drive", src: "CDK", status: "done" as const, coverage: "GL history • customers • vehicles • bins/on-order • open ROs/deals • employees • 15k rooftops", pct: 98.4, note: "15,000 rooftops post-outage" },
@@ -544,7 +565,8 @@ export const useStore = create<AppState>((set, get)=> ({
     return id
   },
   updatePencil: (dealId, pencil)=> set(s=> {
-    const updated = s.deals.map(d=> d.id===dealId ? { ...d, pencil, stage: "pencil" as DealStage, timeline: [...d.timeline, { t: now(), label: `Pencil $${pencil?.monthly}/mo • gross $${pencil?.gross} • 500ms` }] } : d)
+    const ts = new Date().toISOString()
+    const updated = s.deals.map(d=> d.id===dealId ? { ...d, pencil, stage: "pencil" as DealStage, updatedAt: ts, timeline: [...d.timeline, { t: now(), label: `Pencil $${pencil?.monthly}/mo • gross $${pencil?.gross} • 500ms` }] } : d)
     const target = updated.find(d=> d.id===dealId)
     let claims: IncentiveClaim[] = s.incentiveClaims as IncentiveClaim[]
     if (target && pencil) {
@@ -567,7 +589,8 @@ export const useStore = create<AppState>((set, get)=> ({
     return { deals: updated, incentiveClaims: claims }
   }),
   acceptDeal: (dealId)=> set(s=> {
-    const deals = s.deals.map(d=> d.id===dealId ? { ...d, stage: "desked" as DealStage, timeline: [...d.timeline, { t: now(), label: "Customer accepted — desking → F&I • incentives auto-applied" }] } : d)
+    const ts = new Date().toISOString()
+    const deals = s.deals.map(d=> d.id===dealId ? { ...d, stage: "desked" as DealStage, updatedAt: ts, timeline: [...d.timeline, { t: now(), label: "Customer accepted — desking → F&I • incentives auto-applied" }] } : d)
     const target = deals.find(d=> d.id===dealId)
     let claims: IncentiveClaim[] = s.incentiveClaims as IncentiveClaim[]
     if (target) {
@@ -589,15 +612,18 @@ export const useStore = create<AppState>((set, get)=> ({
     }
     return { deals, incentiveClaims: claims }
   }),
-  submitCredit: (dealId)=> set(s=> ({
-    deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "credit" as DealStage, credit: { bureau: 742, decision: "approved", lender: "Wells" }, timeline: [...d.timeline, { t: now(), label: "Credit via Dealertrack → approved (conditioned) • 2 stips" }] } : d)
-  })),
-  toggleFi: (dealId, product)=> set(s=> ({
-    deals: s.deals.map(d=> d.id===dealId ? { ...d, fiMenu: { ...d.fiMenu, [product]: !d.fiMenu[product] }, stage: "menu" as DealStage } : d)
-  })),
-  submitContract: (dealId)=> set(s=> ({
-    deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "contract" as DealStage, funding: { ...d.funding, status: "submitted", cit: d.pencil?.price ?? 48200 }, timeline: [...d.timeline, { t: now(), label: `eContract submitted → CIT $${(d.pencil?.price ?? 48200).toLocaleString()} • TITL Vitu queued` }] } : d)
-  })),
+  submitCredit: (dealId)=> set(s=> {
+    const ts = new Date().toISOString()
+    return { deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "credit" as DealStage, updatedAt: ts, credit: { bureau: 742, decision: "approved", lender: "Wells" }, timeline: [...d.timeline, { t: now(), label: "Credit via Dealertrack → approved (conditioned) • 2 stips" }] } : d) }
+  }),
+  toggleFi: (dealId, product)=> set(s=> {
+    const ts = new Date().toISOString()
+    return { deals: s.deals.map(d=> d.id===dealId ? { ...d, fiMenu: { ...d.fiMenu, [product]: !d.fiMenu[product] }, stage: "menu" as DealStage, updatedAt: ts } : d) }
+  }),
+  submitContract: (dealId)=> set(s=> {
+    const ts = new Date().toISOString()
+    return { deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "contract" as DealStage, updatedAt: ts, funding: { ...d.funding, status: "submitted", cit: d.pencil?.price ?? 48200 }, timeline: [...d.timeline, { t: now(), label: `eContract submitted → CIT $${(d.pencil?.price ?? 48200).toLocaleString()} • TITL Vitu queued` }] } : d) }
+  }),
   deliverDeal: (dealId)=> set(s=> {
     const target = s.deals.find(d=> d.id===dealId)
     let claims: IncentiveClaim[] = (s.incentiveClaims as IncentiveClaim[]).map(c=> c.dealId===dealId && c.status==="pending" ? { ...c, status: "submitted" as IncentiveClaimStatus, submittedAt: new Date().toISOString(), oemResponse: c.stackingConflict ? "Submitted — flagged stacking" : "Submitted to OEM • awaiting AR" } : c)
@@ -616,10 +642,12 @@ export const useStore = create<AppState>((set, get)=> ({
         })
       }
     }
+    const ts = new Date().toISOString()
     return {
-      deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "delivered" as DealStage, funding: { status: "funded", cit: null, depositPaid: d.funding.depositPaid, depositAmount: d.funding.depositAmount, depositMethod: d.funding.depositMethod }, glPosted: true, timeline: [...d.timeline, { t: now(), label: "DELIVERED — floorplan payoff, CIT cleared, commission accrued • GL real-time E2 • owner lifecycle • incentive AR queued" }] } : d),
+      deals: s.deals.map(d=> d.id===dealId ? { ...d, stage: "delivered" as DealStage, updatedAt: ts, deliveredAt: ts, funding: { status: "funded", cit: null, depositPaid: d.funding.depositPaid, depositAmount: d.funding.depositAmount, depositMethod: d.funding.depositMethod }, glPosted: true, timeline: [...d.timeline, { t: now(), label: "DELIVERED — floorplan payoff, CIT cleared, commission accrued • GL real-time E2 • owner lifecycle • incentive AR queued" }] } : d),
       vehicles: s.vehicles.map(v=> v.vin===s.deals.find(d=>d.id===dealId)?.vin ? { ...v, status: "sold" as const } : v),
-      incentiveClaims: claims
+      incentiveClaims: claims,
+      lastPostedAt: ts
     }
   }),
   // ── F3 Fully Online Purchase (same deal object — 97% fix) ──
@@ -770,9 +798,14 @@ export const useStore = create<AppState>((set, get)=> ({
     }))
     return newId
   },
-  updateROStatus: (roId, status)=> set(s=> ({
-    repairOrders: s.repairOrders.map(r=> r.id===roId ? { ...r, status: status as typeof r.status } : r)
-  })),
+  updateROStatus: (roId, status)=> set(s=> {
+    const ts = new Date().toISOString()
+    const isPost = status === "invoiced" || status === "completed"
+    return {
+      repairOrders: s.repairOrders.map(r=> r.id===roId ? { ...r, status: status as typeof r.status, closedAt: isPost ? ts : (r as unknown as { closedAt?: string }).closedAt } : r),
+      ...(isPost ? { lastPostedAt: ts } : {})
+    }
+  }),
   approveMpiItem: (roId, _mpiIndex, approve)=> set(s=> ({
     repairOrders: s.repairOrders.map(r=> {
       if(r.id!==roId) return r
@@ -946,6 +979,52 @@ export const useStore = create<AppState>((set, get)=> ({
     incentiveClaims: (s.incentiveClaims as IncentiveClaim[]).map(c=> c.id===claimId ? { ...c, status, paidAt: status==="paid"? new Date().toISOString(): c.paidAt, oemResponse: status==="paid"? "Paid — reconciled to AR schedule": status==="mismatch"? c.mismatchReason||"Mismatch — OEM short-paid" : c.oemResponse } : c)
   })),
   getGroupConsolidation: () => computeConsolidation(get().vehicles as typeof seedVehicles, get().deals, get().repairOrders as typeof seedROs, get().parts as typeof seedParts),
+  setSelectedRooftop: (r) => set({ selectedRooftop: r }),
+  getLiveKpiDaily: () => {
+    const deals = get().deals
+    const byDate: Record<string, { sales: number; gross: number; rooftops: Record<string, { sales: number; gross: number }> }> = {}
+    deals.forEach(d => {
+      if (d.stage !== "delivered") return
+      const key = (d.deliveredAt || d.updatedAt || d.createdAt).slice(0, 10)
+      if (!byDate[key]) byDate[key] = { sales: 0, gross: 0, rooftops: {} }
+      byDate[key].sales += 1
+      byDate[key].gross += d.pencil?.gross ?? 0
+      const rt = d.rooftop || "dtown"
+      if (!byDate[key].rooftops[rt]) byDate[key].rooftops[rt] = { sales: 0, gross: 0 }
+      byDate[key].rooftops[rt].sales += 1
+      byDate[key].rooftops[rt].gross += d.pencil?.gross ?? 0
+    })
+    const map = new Map(seedKpiDaily.map(b => [b.date + "|" + b.rooftopId, { ...b }]))
+    Object.entries(byDate).forEach(([date, v]) => {
+      const k = date + "|group"
+      const existing = map.get(k)
+      if (existing) {
+        // overlay live delivered sales onto baseline — additive to preserve demo history but reflect new posts
+        const addedSales = v.sales
+        const addedGross = v.gross
+        const newSales = (existing.sales || 0) + addedSales
+        const totalGross = (existing.grossPerUnit || 0) * (existing.sales || 0) + addedGross
+        map.set(k, { ...existing, sales: newSales, grossPerUnit: newSales ? Math.round(totalGross / newSales) : existing.grossPerUnit })
+      } else {
+        map.set(k, { date, rooftopId: "group" as const, leads: 2, appointmentsSet: 1, shows: 1, sales: v.sales, closingPct: 20.4, grossPerUnit: v.sales ? Math.round(v.gross / v.sales) : 0, frontGrossPerUnit: 1200, backGrossPerUnit: 600, roCount: 2, serviceSales: 2100, hoursFlagged: 6, efficiencyPct: 110, partsSales: 2200, partsGrossPct: 36, inventoryCount: 18, agingGt45: 2 })
+      }
+      // per-rooftop overlay
+      Object.entries(v.rooftops).forEach(([rt, rv]) => {
+        const rk = date + "|" + rt
+        const ex = map.get(rk)
+        if (ex) {
+          const newSales = (ex.sales || 0) + rv.sales
+          const totalGross = (ex.grossPerUnit || 0) * (ex.sales || 0) + rv.gross
+          map.set(rk, { ...ex, sales: newSales, grossPerUnit: newSales ? Math.round(totalGross / newSales) : ex.grossPerUnit })
+        } else {
+          // create missing per-rooftop point by cloning group template for that date
+          const tpl = map.get(k) || map.get(date + "|group")
+          map.set(rk, { date, rooftopId: rt as "dtown"|"north"|"westside", leads: 1, appointmentsSet: 1, shows: 0, sales: rv.sales, closingPct: 20.4, grossPerUnit: rv.sales ? Math.round(rv.gross / rv.sales) : 0, frontGrossPerUnit: 1200, backGrossPerUnit: 600, roCount: 1, serviceSales: 900, hoursFlagged: 2, efficiencyPct: 108, partsSales: 800, partsGrossPct: 34, inventoryCount: 6, agingGt45: 1, avgSpeedToLeadSec: 200 })
+        }
+      })
+    })
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
+  },
   // ── F10 Migration Workbench ──
   runExtractor: (id: string)=> {
     const ext = get().migration.extractors.find(e=> e.id===id)
