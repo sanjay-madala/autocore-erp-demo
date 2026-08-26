@@ -22,6 +22,7 @@ import {
   Command,
   ShieldCheck,
   CaretUpDown,
+  Lightning,
 } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import CommandCenter from "@/features/CommandCenter"
@@ -34,6 +35,7 @@ import AccountingClose from "@/features/AccountingClose"
 import DeveloperPortal from "@/features/DeveloperPortal"
 import AIAgents from "@/features/AIAgents"
 import MigrationWorkbench from "@/features/MigrationWorkbench"
+import F1Flow from "@/features/F1Flow"
 
 // ──────────────────────────────────────────────────────────
 // Types
@@ -56,6 +58,7 @@ const NAV: NavSection[] = [
   {
     label: "OPERATE",
     items: [
+      { id: "f1-flow", label: "F1 Flow", icon: Lightning },
       { id: "command-center", label: "Command Center", icon: SquaresFour },
       { id: "showroom", label: "Showroom", icon: Storefront },
       { id: "crm-inbox", label: "CRM Inbox", icon: ChatsCircle, badge: "12" },
@@ -138,7 +141,7 @@ function GeometricA({ size = 28 }: { size?: number }) {
 export function Shell({ children }: { children?: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false)
   const [mobileOpen, setMobileOpen] = React.useState(false)
-  const [activeId, setActiveId] = React.useState<string>("command-center")
+  const [activeId, setActiveId] = React.useState<string>("f1-flow")
   const [rooftop, setRooftop] = React.useState<Rooftop>("All")
 
   // Close mobile drawer on resize to desktop
@@ -539,6 +542,7 @@ export function Shell({ children }: { children?: React.ReactNode }) {
             <div className="p-0">{children}</div>
           ) : (
             <div className="min-w-0">
+              {activeId === "f1-flow" && <F1Flow />}
               {activeId === "command-center" && <CommandCenter />}
               {(activeId === "vehicles" || activeId === "transfers") && <Inventory />}
               {(activeId === "showroom" || activeId === "fi-desk") && <Desking />}
@@ -549,7 +553,7 @@ export function Shell({ children }: { children?: React.ReactNode }) {
               {(activeId === "developer" || activeId === "marketplace") && <DeveloperPortal />}
               {activeId === "ai-agents" && <AIAgents />}
               {activeId === "workbench" && <MigrationWorkbench />}
-              {!["command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","workbench"].includes(activeId) && <CommandCenter />}
+              {!["f1-flow","command-center","vehicles","transfers","showroom","fi-desk","crm-inbox","service-lane","parts-counter","gl-close","developer","marketplace","ai-agents","workbench"].includes(activeId) && <CommandCenter />}
             </div>
           )}
         </main>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { vehicles, type Vehicle, type RooftopId, type VehicleStatus } from "@/data/vehicles"
+import { vehicles as seedVehicles, type Vehicle, type RooftopId, type VehicleStatus } from "@/data/vehicles"
+import { useStore } from "@/lib/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -109,6 +110,9 @@ function syndicationFor(v: Vehicle): SyndicationRow[] {
 
 /* ───────── component ───────── */
 export default function Inventory() {
+  const storeVehicles = useStore(s=> s.vehicles)
+  const vehicles = storeVehicles.length ? storeVehicles as unknown as Vehicle[] : seedVehicles
+  const deals = useStore(s=> s.deals)
   const [rooftop, setRooftop] = useState<RooftopFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [make, setMake] = useState<MakeFilter>("all")
@@ -117,17 +121,17 @@ export default function Inventory() {
   const [showTransfer, setShowTransfer] = useState(false)
   const [destRooftop, setDestRooftop] = useState<RooftopId>("north")
 
-  const selected = useMemo(() => vehicles.find((v) => v.id === selectedId) ?? null, [selectedId])
+  const selected = useMemo(() => vehicles.find((v) => v.id === selectedId) ?? null, [selectedId, vehicles])
 
   const kpis = useMemo(() => {
     const sellable = vehicles.filter((v) => v.status !== "sold")
     const aged = sellable.filter((v) => v.agingDays > 45).length
-    const recon = vehicles.filter((v) => v.reconStatus === "in_progress").length
+    const recon = vehicles.filter((v) => (v as unknown as { reconStatus?: string }).reconStatus === "in_progress").length
     const transfersMTD = 14 // mock cross-rooftop transfers
     const avgDays = Math.round(sellable.reduce((s, v) => s + v.agingDays, 0) / Math.max(1, sellable.length))
     const frontline = vehicles.filter((v) => v.status === "stock").length
-    return { total: sellable.length, aged, recon, transfersMTD, avgDays, frontline }
-  }, [])
+    return { total: sellable.length, aged, recon, transfersMTD, avgDays, frontline, soldViaF1: deals.filter(d=>d.stage==="delivered").length }
+  }, [vehicles, deals])
 
   const filtered = useMemo(() => {
     return vehicles.filter((v) => {

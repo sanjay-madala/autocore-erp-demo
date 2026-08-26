@@ -7,6 +7,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useStore } from "@/lib/store"
 
 const CHECKLIST = [
   { id:1, k:"Deals journal posted", owner:"System", status:"done", note:"Real-time • 12 deals MTD" },
@@ -34,6 +35,9 @@ const JES = [
   { id:"JE-20443", t:"Floorplan payoff — VIN 1FT...", by:"M. Rivera • manual", amt:"$38,200 Dr Floorplan / Cr Cash", status:"pending" },
 ]
 export default function AccountingClose(){
+  const live = useStore(s=> s.deals)
+  const liveCit = live.filter(d=> d.funding.status==="submitted").length
+  const liveFunded = live.filter(d=> d.funding.status==="funded" || d.glPosted).length
   const [active, setActive] = useState<number>(3)
   const done = CHECKLIST.filter(c=>c.status==="done").length
   const pct = Math.round(done / CHECKLIST.length * 100)
@@ -86,7 +90,7 @@ export default function AccountingClose(){
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
               <span className="inline-flex items-center gap-2 text-[12px] font-semibold"><Bank size={14} className="text-[var(--accent)]" /> Continuous schedules — self-reconciling</span>
-              <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-white">Daily • exception flags</span>
+              <span className="flex items-center gap-1"><span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] shadow-sm">LIVE CIT {liveCit} • funded {liveFunded}</span><span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-white">Daily • exception flags</span></span>
             </div>
             <div className="grid gap-3 p-3 sm:grid-cols-2">
               {SCHEDULES.map(s=>(
