@@ -91,7 +91,15 @@ export default function CommandCenter() {
   const lastPostedAt = useStore(s=> s.lastPostedAt)
   const [showDoc, setShowDoc] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
-  const [docRecipients, setDocRecipients] = useState(127)
+  const docRecipients = useStore(s=> s.docRecipients)
+  const setDocRecipients = useStore(s=> s.setDocRecipients)
+  const adjustDocRecipients = useStore(s=> s.adjustDocRecipients)
+  const [docToast, setDocToast] = useState<string|null>(null)
+  const handleSendTest = () => {
+    const msg = `DOC sent 06:00 • ${docRecipients} delivered`
+    setDocToast(msg)
+    setTimeout(()=> setDocToast(null), 2600)
+  }
   // ── F8/F14 + E11 live store data
   const vehicles = useStore(s=> s.vehicles)
   const deals = useStore(s=> s.deals)
@@ -990,11 +998,11 @@ export default function CommandCenter() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.34, delay: 0.18, ease: [0.16, 1, 0.3, 1] as const }}
-          className="surface mt-3 overflow-hidden p-0"
+          className="surface relative mt-3 overflow-hidden p-0"
         >
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-white px-4 py-3">
             <h3 className="inline-flex items-center gap-2 text-[13px] font-[650]">
-              <EnvelopeSimple size={14} className="text-[var(--accent)]" /> Scheduled DOC distribution • 06:00 EST daily
+              <EnvelopeSimple size={14} className="text-[var(--accent)]" /> 06:00 EST Daily DOC • Scheduled distribution
               <span className="hidden items-center gap-1 rounded-full bg-zinc-900 px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-white md:inline-flex">
                 RMI BAR • §6.10 • E11
               </span>
@@ -1044,9 +1052,9 @@ export default function CommandCenter() {
                           <span className="rounded-full bg-emerald-500 px-2 py-0.5 font-mono text-[11px] font-[700] text-white">{docRecipients} • ≥100 ✓</span>
                         </div>
                         <div className="mt-2 flex items-center gap-1.5">
-                          <Button size="sm" variant="outline" className="h-7 flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={()=> setDocRecipients(c=> Math.min(250, c+10))}>+10</Button>
-                          <Button size="sm" variant="outline" className="h-7 flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={()=> setDocRecipients(c=> Math.max(105, c-10))}>-10</Button>
-                          <span className="font-mono text-[11px] text-zinc-400">RMI bar: 100+ required</span>
+                          <Button size="sm" variant="outline" className="h-7 flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={()=> adjustDocRecipients(10)}>+10</Button>
+                          <Button size="sm" variant="outline" className="h-7 flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={()=> adjustDocRecipients(-10)}>-10</Button>
+                          <span className="font-mono text-[11px] text-zinc-400">RMI bar: 100+ required • Edit schedule +10/-10 live</span>
                         </div>
                         <div className="mt-2 max-h-32 overflow-y-auto space-y-1.5 pr-1">
                           {Array.from({ length: 8 }, (_, i)=> ({
@@ -1097,7 +1105,7 @@ export default function CommandCenter() {
                     </div>
                     <div className="mt-3 flex gap-2">
                       <Button size="sm" className="flex-1 bg-white text-zinc-900 hover:bg-zinc-100" onClick={()=> setDocRecipients(127)}>Save schedule</Button>
-                      <Button size="sm" variant="outline" className="flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15">Run now → {docRecipients}× email</Button>
+                      <Button size="sm" variant="outline" className="flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={handleSendTest}>Run now → {docRecipients}× email</Button>
                     </div>
                   </div>
                 </div>
@@ -1144,6 +1152,18 @@ export default function CommandCenter() {
               <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-[11px] text-emerald-800">
                 RMI bar met: ≥100 recipients supported • currently {docRecipients} • add/remove in builder → distribution auto-updates • no export
               </div>
+              <div className="mt-2 rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-center font-mono text-[11px] font-[650] text-[var(--text-primary)]">
+                Daily 06:00 EST • {docRecipients} recipients • RMI benchmark
+              </div>
+              <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-center font-mono text-[10px] leading-snug text-emerald-800">
+                Consolidated composite without exports • OEM UCG
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <Button size="sm" variant="outline" className="flex-1 h-7 bg-white text-[11px] font-mono" onClick={()=> adjustDocRecipients(-10)}>-10</Button>
+                <Button size="sm" variant="outline" className="flex-1 h-7 bg-white text-[11px] font-mono" onClick={()=> adjustDocRecipients(10)}>+10</Button>
+                <Button size="sm" className="flex-1 h-7 bg-zinc-900 text-white text-[11px] hover:bg-zinc-800" onClick={handleSendTest}>Send test</Button>
+              </div>
+              <div className="mt-1 text-center font-mono text-[10px] text-[var(--text-faint)]">Edit schedule +10/-10 • live • RMI ≥100 • currently {docRecipients}</div>
             </div>
 
             <div className="p-0">
@@ -1194,7 +1214,8 @@ export default function CommandCenter() {
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-medium shadow-sm">
                   <EnvelopeSimple size={12} /> Delivers to {docRecipients} inboxes • 06:00 EST • no manual build • RMI ≥100 ✓
                 </span>
-                <span className="font-mono text-[var(--text-muted)]">Ad-hoc builder → scheduled • {selectedRooftop} filter • consolidated composite without exports • ≤60s freshness</span>
+                <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-mono text-[10px] shadow-sm">Daily 06:00 EST • {docRecipients} recipients • RMI benchmark</span>
+                <span className="font-mono text-[var(--text-muted)]">Ad-hoc builder → scheduled • {selectedRooftop} filter • Consolidated composite without exports • OEM UCG • ≤60s freshness</span>
                 <span className="ml-auto inline-flex items-center gap-1 font-medium text-[var(--accent)]">
                   <Clock size={12} /> Built live from GL • {lastPostedAgo} • {p99Note}
                 </span>
@@ -1218,19 +1239,27 @@ export default function CommandCenter() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" className="flex-1">
+                        <Button size="sm" className="flex-1" onClick={handleSendTest}>
                           Send test now → {docRecipients} recipients
                         </Button>
                         <Button size="sm" variant="outline" className="flex-1" onClick={()=> setBuilderOpen(v=> !v)}>
                           {builderOpen? "Close builder" : "Edit in builder"}
                         </Button>
                       </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-[11px] text-emerald-800">Consolidated composite without exports • OEM UCG • Daily 06:00 EST • {docRecipients} recipients • RMI benchmark</div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </div>
+          <AnimatePresence>
+            {docToast && (
+              <motion.div initial={{opacity:0, y:8, scale:0.98}} animate={{opacity:1, y:0, scale:1}} exit={{opacity:0, y:6, scale:0.98}} className="absolute bottom-3 left-3 right-3 z-20 rounded-xl bg-zinc-900 px-4 py-2.5 text-center font-mono text-[11px] font-[700] text-white shadow-xl border border-white/10">
+                DOC sent 06:00 • {docRecipients} delivered
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         {/* footer spec note */}

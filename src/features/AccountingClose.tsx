@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle, Clock, WarningCircle, ArrowsClockwise, CurrencyDollar, FileText, SealCheck,
   Bank, Receipt, ArrowRight, TrendUp, ClipboardText, Buildings, CaretRight, X, MagnifyingGlass, Info,
-  ArrowSquareOut, CreditCard, Database, HardDrives, Lightning, Plugs
+  ArrowSquareOut, CreditCard, Database, HardDrives, Lightning, Plugs, EnvelopeSimple, Users
 } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -50,6 +50,14 @@ export default function AccountingClose(){
   const [oemTab, setOemTab] = useState<"toyota"|"ford"|"honda">("toyota")
   const [whExporting, setWhExporting] = useState(false)
   const [whProgress, setWhProgress] = useState(0)
+  const docRecipients = useStore(s=> s.docRecipients)
+  const adjustDocRecipients = useStore(s=> s.adjustDocRecipients)
+  const [docToast, setDocToast] = useState<string|null>(null)
+  const handleSendTest = () => {
+    const msg = `DOC sent 06:00 • ${docRecipients} delivered`
+    setDocToast(msg)
+    setTimeout(()=> setDocToast(null), 2600)
+  }
   const liveCit = deals.filter(d=> d.funding.status==="submitted").length
   const liveFunded = deals.filter(d=> d.funding.status==="funded" || d.glPosted).length
   const unsold = useMemo(()=> vehicles.filter(v=> v.status!=="sold"),[vehicles])
@@ -520,7 +528,61 @@ export default function AccountingClose(){
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-[var(--border)] bg-white p-3.5"><div className="text-[12px] font-semibold inline-flex items-center gap-2"><CurrencyDollar size={14} className="text-emerald-600" /> CIT lifecycle</div><div className="mt-1 text-[11px] text-[var(--text-muted)]">Delivery → CIT created → funding submitted → CIT cleared → docs-in-transit 0. Avg 4.2 days • live {liveCit} open.</div><div className="mt-2 h-1.5 rounded-full bg-zinc-100 overflow-hidden"><div className="h-full w-[62%] bg-emerald-500 rounded-full" /></div></div>
         <div className="rounded-xl border border-[var(--border)] bg-white p-3.5"><div className="text-[12px] font-semibold inline-flex items-center gap-2"><ArrowsClockwise size={14} /> F14 Incentive → F8 Close</div><div className="mt-1 text-[11px] text-[var(--text-muted)]">Incentives auto-apply at pencil → claims to OEM → AR reconciliation • {incentiveSummary.total} claims live • stacking check enforced</div></div>
-        <div className="rounded-xl border border-[var(--border)] bg-white p-3.5"><div className="text-[12px] font-semibold inline-flex items-center gap-2"><Clock size={14} /> 6am DOC distribution</div><div className="mt-1 text-[11px] text-[var(--text-muted)]">Scheduled RMI-style: daily DOC to 12 GMs at 6am • 100+ recipients • no spreadsheet • per-store OEM composite</div></div>
+        <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-3.5 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-[700] tracking-tight"><span className="grid h-6 w-6 place-items-center rounded-lg bg-zinc-900 text-white"><Clock size={12} weight="bold" /></span> 06:00 EST Daily DOC</span>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 font-mono text-[10px] font-[700] ${docRecipients>=100 ? "bg-emerald-500 border-emerald-600 text-white" : "bg-amber-500 border-amber-600 text-black"}`}>{docRecipients} ≥100 {docRecipients>=100?"✓":"✗"} • RMI</span>
+          </div>
+          {/* RMI bar */}
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 border border-zinc-200/60">
+            <motion.div initial={{width:0}} animate={{width:`${Math.min(100, (docRecipients/150)*100)}%`}} transition={{duration:0.45, ease:[0.16,1,0.3,1]}} className={`h-full rounded-full ${docRecipients>=100 ? "bg-emerald-500" : "bg-amber-500"}`} />
+          </div>
+          <div className="mt-1 flex justify-between font-mono text-[10px] leading-none">
+            <span className="text-[var(--text-muted)]">RMI benchmark 100</span>
+            <span className={docRecipients>=100 ? "font-[700] text-emerald-700" : "font-[700] text-amber-700"}>{docRecipients>=100 ? "RMI ✓ • benchmark met" : `${100-docRecipients} to RMI • add recipients`}</span>
+          </div>
+          {/* avatars 8 + +119 more */}
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex -space-x-2">
+              {[
+                {in:"AM",bg:"bg-zinc-900"},{in:"SW",bg:"bg-[#0f62fe]"},{in:"JD",bg:"bg-zinc-800"},{in:"RN",bg:"bg-emerald-700"},
+                {in:"GW",bg:"bg-zinc-900"},{in:"JS",bg:"bg-[#b95000]"},{in:"OT",bg:"bg-zinc-700"},{in:"AK",bg:"bg-[#0e7a41]"},
+              ].map((a,i)=> (
+                <span key={i} className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white text-[9px] font-[800] text-white shadow-sm ${a.bg}`} style={{zIndex: 8-i}}>{a.in}</span>
+              ))}
+            </div>
+            <span className="ml-1 rounded-full bg-zinc-900 px-2.5 py-1 font-mono text-[11px] font-[700] text-white">+{Math.max(0, docRecipients-8)} more</span>
+            <span className="ml-auto hidden items-center gap-1 font-mono text-[10px] text-[var(--text-muted)] md:inline-flex"><Users size={12}/> 8 shown</span>
+          </div>
+          <div className="mt-2 truncate font-mono text-[10px] leading-tight text-[var(--text-muted)]">Alex Morgan • S. Williams • GM Downtown (Toyota DOC) • GM North (Ford) • GM Westside (Honda UCG/BMW) • +{Math.max(0, docRecipients-8)} distribution</div>
+          {/* schedule pill */}
+          <div className="mt-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-center font-mono text-[11px] font-[550] leading-none text-[var(--text-primary)]">
+            Daily 06:00 EST • {docRecipients} recipients • RMI benchmark
+          </div>
+          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-center font-mono text-[10px] leading-snug text-emerald-800">
+            Consolidated composite without exports • OEM UCG
+          </div>
+          <div className="mt-1 text-center text-[11px] leading-snug text-[var(--text-muted)]">Per-store OEM composite (Toyota DOC / Ford / Honda UCG) • auto-built from GL • no spreadsheet</div>
+          {/* controls — Edit schedule +10/-10 live */}
+          <div className="mt-3 flex items-center gap-1.5">
+            <span className="font-mono text-[10px] font-[700] tracking-widest text-[var(--text-muted)]">Edit schedule</span>
+            <Button size="sm" variant="outline" className="h-7 flex-1 bg-white px-2 font-mono text-[11px] font-[650]" onClick={()=> adjustDocRecipients(-10)}>-10</Button>
+            <Button size="sm" variant="outline" className="h-7 flex-1 bg-white px-2 font-mono text-[11px] font-[650]" onClick={()=> adjustDocRecipients(10)}>+10</Button>
+          </div>
+          <Button size="sm" variant="outline" className="mt-1 w-full h-7 bg-white font-mono text-[11px] font-[550] border-dashed" onClick={()=> adjustDocRecipients(docRecipients >= 150 ? -10 : 10)}>Edit schedule +10/-10</Button>
+          <div className="mt-1 text-center font-mono text-[10px] text-[var(--text-faint)]">live • RMI ≥100 required • currently {docRecipients}</div>
+          <Button size="sm" className="mt-2.5 w-full gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800 h-8 text-[12px] font-[600]" onClick={handleSendTest}>
+            <EnvelopeSimple size={12} weight="bold" /> Send test
+          </Button>
+          <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[10px] text-[var(--text-muted)]"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> 06:00 EST push • email + portal • 7yr retention</div>
+          <AnimatePresence>
+            {docToast && (
+              <motion.div initial={{opacity:0, y:8, scale:0.98}} animate={{opacity:1, y:0, scale:1}} exit={{opacity:0, y:6, scale:0.98}} transition={{duration:0.22, ease:[0.16,1,0.3,1]}} className="absolute inset-x-2 bottom-2 rounded-xl bg-zinc-900 px-3 py-2.5 text-center font-mono text-[11px] font-[700] text-white shadow-xl border border-white/10">
+                DOC sent 06:00 • {docRecipients} delivered
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
       <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-center font-mono text-[10px] tracking-wide text-[var(--text-faint)]">E2 Accounting • Real-time posting • F8 Multi-rooftop Close • F14 Incentives • F15 Flag → Payroll • Intercompany auto-posted at transaction time (Inventory)</div>
       <AnimatePresence>

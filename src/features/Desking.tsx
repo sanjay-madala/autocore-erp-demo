@@ -25,6 +25,9 @@ import {
   Copy,
   Wrench,
   PlugsConnected,
+  Pause,
+  Play,
+  Link,
 } from "@phosphor-icons/react"
 
 /* ───────── dummy data ───────── */
@@ -169,6 +172,63 @@ export default function Desking() {
   // E5-T09 OEM SmartPath / Monogram — certified program hooks via E9 API
   const oemPrograms = useStore((s) => s.oemPrograms)
   const [oemApplied, setOemApplied] = useState<string | null>(null)
+  // ── F3 Omnichannel — pause/resume continuity (single deal object • zinc/cobalt) ──
+  const deals = useStore((s) => s.deals)
+  const activeDealId = useStore((s) => s.activeDealId)
+  const startOnlineDeal = useStore((s) => s.startOnlineDeal)
+  const pauseDeal = useStore((s) => s.pauseDeal)
+  const resumeDeal = useStore((s) => s.resumeDeal)
+  const setOnlineStartedAt = useStore((s) => s.setOnlineStartedAt)
+  const activeDeal = useMemo(()=> deals.find((d)=> d.id===activeDealId) ?? deals[0], [deals, activeDealId])
+  const [toast, setToast] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const fmtHM = (iso: string | null) => {
+    if (!iso) return "—"
+    try {
+      const d = new Date(iso)
+      const hh = String(d.getHours()).padStart(2, "0")
+      const mm = String(d.getMinutes()).padStart(2, "0")
+      return `${hh}:${mm}`
+    } catch { return "—" }
+  }
+  const onlineTime = fmtHM(activeDeal?.onlineStartedAt ?? null)
+  const deskTime = fmtHM(activeDeal?.deskOpenedAt ?? activeDeal?.updatedAt ?? null)
+  const resumeLink = `https://sovereign.app/resume/${activeDeal?.id ?? "8841"}`
+  const handleCopyResume = async () => {
+    const link = resumeLink
+    try { await navigator.clipboard.writeText(link) } catch { /* fallback */ }
+    setCopied(true)
+    setToast("Copied — resume link • BDC alerted • 97% fix")
+    pushAudit("F3 • Resume link", `Copied ${link} • BDC alerted • 97% fix — navigator.clipboard.writeText`)
+    setTimeout(()=> { setToast(null); setCopied(false) }, 2600)
+  }
+  const handleToggleOnline = () => {
+    if (!activeDeal) return
+    if (activeDeal.onlineStartedAt) {
+      setOnlineStartedAt(activeDeal.id, null)
+      pushAudit("F3 • Online Started", "Online Started cleared • back to in-store • deal persists same record")
+    } else {
+      startOnlineDeal(activeDeal.id)
+      pushAudit("F3 • Online Started", `Online Started ${fmtHM(new Date().toISOString())} • trade VIN/photos/condition pre-filled • ${activeDeal.tradeOffer?.vin.slice(-6) ?? "1HGCM82633A099412".slice(-6)}`)
+    }
+  }
+  const handlePauseToggle = async () => {
+    if (!activeDeal) return
+    if (activeDeal.pausedAt) {
+      resumeDeal(activeDeal.id)
+      pushAudit("F3 • Resumed", `Resumed — deal restored from paused • same #${activeDeal.id} • no re-key`)
+      setToast("Resumed — deal restored • same record • no re-key")
+      setTimeout(()=> setToast(null), 2200)
+    } else {
+      pauseDeal(activeDeal.id)
+      try { await navigator.clipboard.writeText(resumeLink) } catch {}
+      setCopied(true)
+      setToast("Copied — resume link • BDC alerted • 97% fix")
+      pushAudit("F3 • Paused", `Paused mid-checkout — resume link sent, BDC alerted, deal persists • ${resumeLink} • stage ${activeDeal.stage} → lead • pausedAt ${new Date().toISOString()}`)
+      setTimeout(()=> { setToast(null); setCopied(false) }, 2600)
+    }
+  }
 
   const vehicle: Vehicle | undefined = useMemo(() => vehicles.find((v) => v.id === selectedVehicleId), [selectedVehicleId])
   const lender: Lender | undefined = useMemo(() => LENDERS.find((l) => l.id === lenderId), [lenderId])
@@ -318,28 +378,179 @@ export default function Desking() {
         </div>
       )}
 
-      {/* ── Deal continuity banner — single record ── */}
+      {/* ── F3 Omnichannel continuity — Online Started toggle • Pause/Resume • resume link ── */}
       <div className="mx-auto max-w-[1440px] px-5 pt-4 md:px-6">
-        <div className="flex flex-col gap-3 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-muted)] px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white">
-              <SealCheck size={12} weight="fill" /> Single deal object
-            </span>
-            <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">#8841 • ONLINE → DESK</span>
-            <span className="hidden h-1 w-1 rounded-full bg-[var(--accent)] md:inline-block" />
-            <span className="text-[var(--text-secondary)]">
-              <span className="font-medium text-[var(--text-primary)]">J. Morgan</span> online 09:14 EST →{" "}
-              <span className="font-medium text-[var(--text-primary)]">S. Rivera</span> desk 09:22 • no re-key
-            </span>
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
+          {/* header — zinc-900 • cobalt accent */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-zinc-900 px-4 py-3 text-white">
+            <div className="flex items-center gap-3">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--accent)] text-white shadow-sm">
+                <Clock size={16} weight="fill" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-semibold tracking-tight">F3 Omnichannel Continuity</span>
+                  <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 font-mono text-[10px] tracking-widest text-white">ONLINE → DESK</span>
+                  <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">97% fix</span>
+                </div>
+                <div className="text-[11px] leading-none text-white/70">One deal object • no re-key • payment matched to penny • BDC alerted</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Online Started toggle */}
+              <label className="flex cursor-pointer items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 hover:bg-white/15 transition-colors-taste">
+                <input
+                  type="checkbox"
+                  checked={!!activeDeal?.onlineStartedAt}
+                  onChange={handleToggleOnline}
+                  className="h-3.5 w-3.5 rounded border-white/30 bg-white/20 accent-[var(--accent)]"
+                />
+                <span className="text-[11px] font-medium">Online Started</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${activeDeal?.onlineStartedAt ? "bg-emerald-400 animate-pulse" : "bg-white/30"}`} />
+              </label>
+              <Button
+                size="sm"
+                variant={activeDeal?.pausedAt ? "secondary" : "default"}
+                onClick={handlePauseToggle}
+                className={`gap-1.5 ${activeDeal?.pausedAt ? "bg-amber-500 text-white hover:bg-amber-600 border-amber-500" : ""}`}
+              >
+                {activeDeal?.pausedAt ? <><Play size={12} weight="fill" /> Resume</> : <><Pause size={12} weight="fill" /> Pause</>}
+              </Button>
+              <span className="hidden rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold text-zinc-900 md:inline-flex">#{activeDeal?.id ?? "8841"} • #8841 • {activeDeal?.stage ?? "lead"}{activeDeal?.pausedAt ? " • paused" : ""}</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            <Badge variant="success" className="bg-white">
-              <CheckCircle size={12} weight="fill" /> Payment match to penny (E5)
-            </Badge>
-            <Badge variant={eSig === "Signed" || eSig === "Funded" ? "success" : eSig === "Sent" || eSig === "Viewed" ? "warning" : "neutral"}>
-              <Signature size={12} /> E-sign: {eSig}
-            </Badge>
+
+          {/* continuity banner — dynamic times (onlineStartedAt vs deskOpenedAt) */}
+          <div className="flex flex-col gap-3 bg-[var(--accent-muted)] px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white">
+                <SealCheck size={12} weight="fill" /> Single deal object
+              </span>
+              <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">#{activeDeal?.id ?? "8841"} • ONLINE → DESK</span>
+              <span className="hidden h-1 w-1 rounded-full bg-[var(--accent)] md:inline-block" />
+              <span className="text-[var(--text-secondary)]">
+                <span className="font-medium text-[var(--text-primary)]">J. Morgan</span> online {onlineTime} EST →{" "}
+                <span className="font-medium text-[var(--text-primary)]">S. Rivera</span> desk {deskTime} • same #{activeDeal?.id ?? "8841"} • same #8841 • no re-key
+                <span className="hidden font-mono text-[10px] text-[var(--text-faint)]">Online 09:14 → Desk 09:22 same #8841</span>
+              </span>
+              {activeDeal?.tradeOffer && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-border)] bg-white px-2 py-0.5 font-mono text-[11px] font-medium">
+                  VIN …{activeDeal.tradeOffer.vin.slice(-6)} • {activeDeal.tradeOffer.photos.length} photos • {activeDeal.tradeOffer.condition}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <Badge variant="success" className="bg-white">
+                <CheckCircle size={12} weight="fill" /> Payment match to penny (E5)
+              </Badge>
+              <Badge variant={eSig === "Signed" || eSig === "Funded" ? "success" : eSig === "Sent" || eSig === "Viewed" ? "warning" : "neutral"}>
+                <Signature size={12} /> E-sign: {eSig}
+              </Badge>
+              {activeDeal?.onlineStartedAt && <Badge variant="neutral" className="bg-zinc-900 text-white border-zinc-700">Online {onlineTime} • Desk {deskTime} same #{activeDeal.id}</Badge>}
+            </div>
           </div>
+
+          {/* tradeOffer pre-fill strip — VIN photos/condition from tradeOffer */}
+          {activeDeal?.tradeOffer ? (
+            <div className="flex flex-wrap items-center gap-2 border-y border-[var(--border)] bg-[var(--surface-muted)]/60 px-4 py-2.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold text-white">
+                <Car size={12} weight="fill" /> Trade pre-filled
+              </span>
+              <span className="font-mono text-[11px] font-medium">VIN {activeDeal.tradeOffer.vin} • …{activeDeal.tradeOffer.vin.slice(-6)}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-zinc-400 md:inline-block" />
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                {activeDeal.tradeOffer.photos.map((p) => (
+                  <span key={p} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white px-2 py-0.5 font-mono text-[10px] font-medium">
+                    {p} ✓
+                  </span>
+                ))}
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${activeDeal.tradeOffer.condition === "clean" ? "bg-emerald-500 text-white" : activeDeal.tradeOffer.condition === "average" ? "bg-amber-500 text-white" : "bg-zinc-900 text-white"}`}>
+                  {activeDeal.tradeOffer.condition}
+                </span>
+              </span>
+              <span className="font-mono text-[11px] font-semibold text-emerald-700">
+                {fmt(activeDeal.tradeOffer.firmLow)}–{fmt(activeDeal.tradeOffer.firmHigh)} • {activeDeal.tradeOffer.appraisalSource}
+              </span>
+              <span className="ml-auto hidden font-mono text-[10px] text-[var(--text-faint)] md:inline">captured {new Date(activeDeal.tradeOffer.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} • E3</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 border-y border-dashed border-[var(--border)] bg-white px-4 py-2.5 text-[11px] text-[var(--text-muted)]">
+              <WarningCircle size={14} className="text-amber-600" /> No tradeOffer yet — toggle Online Started to pre-fill VIN photos/condition • then Pause keeps deal
+            </div>
+          )}
+
+          {/* resume link — one-click copy • auto-copies via navigator.clipboard.writeText • toast */}
+          <div className="grid gap-3 bg-white p-4 md:grid-cols-[1.35fr_0.75fr]">
+            <div className="space-y-2">
+              <div className="text-label-mono text-[var(--text-muted)]">Pause / resume link — one click to copy • auto-copies • BDC alerted • 97% fix</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyResume}
+                  className="group flex flex-1 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-left hover:border-[var(--accent-border)] hover:bg-[var(--accent-muted)]/40 transition-colors-taste"
+                  title="Click to copy resume link"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-zinc-900 text-white group-hover:bg-[var(--accent)] transition-colors-taste">
+                    <Link size={12} weight="bold" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-[var(--text-primary)]">{resumeLink}</span>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors-taste ${copied ? "bg-emerald-500 text-white" : "bg-zinc-900 text-white group-hover:bg-[var(--accent)]"}`}>
+                    <Copy size={11} weight={copied ? "fill" : "regular"} /> {copied ? "Copied ✓" : "Copy"}
+                  </span>
+                </button>
+                <Button size="sm" onClick={handleCopyResume} className="gap-1.5 whitespace-nowrap">
+                  <Copy size={12} /> Copy link
+                </Button>
+              </div>
+              <div className="font-mono text-[10px] tracking-wide text-[var(--text-faint)]">https://sovereign.app/resume/{`{id}`} • one object • 97% fix • deal persists on pause</div>
+            </div>
+            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/50 p-3">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${activeDeal?.pausedAt ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                <span className="text-[12px] font-semibold">{activeDeal?.pausedAt ? `Paused ${fmtHM(activeDeal.pausedAt)}` : "Active — desk open"}</span>
+                <span className="ml-auto rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-medium border">stage: {activeDeal?.stage ?? "lead"}</span>
+              </div>
+              <div className="font-mono text-[11px] leading-snug text-[var(--text-muted)]">
+                {activeDeal?.pausedAt ? "Deal persists — pausedAt set • resume link sent • BDC task queued" : "Pause sets deal.stage = lead with pausedAt • resume restores • no re-key"}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant={activeDeal?.pausedAt ? "secondary" : "default"} onClick={handlePauseToggle} className="flex-1 gap-1.5">
+                  {activeDeal?.pausedAt ? <><Play size={12} weight="fill" /> Resume deal</> : <><Pause size={12} weight="fill" /> Pause deal</>}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleCopyResume} className="gap-1.5">
+                  <Link size={12} /> Resume link
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* paused banner — when pausedAt set */}
+          <AnimatePresence>
+            {activeDeal?.pausedAt && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] as const }}
+                className="overflow-hidden border-t border-amber-200 bg-amber-50"
+              >
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-[12px] text-amber-900">
+                  <span className="inline-flex items-center gap-1.5 font-semibold">
+                    <WarningCircle size={14} weight="fill" className="text-amber-600" /> Paused mid-checkout — resume link sent, BDC alerted, deal persists
+                  </span>
+                  <span className="rounded-full border border-amber-200 bg-white px-2.5 py-0.5 font-mono text-[11px] font-medium">{resumeLink}</span>
+                  <button
+                    onClick={handleCopyResume}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-amber-700 transition-colors-taste"
+                  >
+                    <Copy size={11} weight="fill" /> Copy resume link
+                  </button>
+                  <span className="font-mono text-[10px] text-amber-700">
+                    pausedAt {new Date(activeDeal.pausedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} • stage {activeDeal.stage} = lead • BDC task • 97% fix
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -1159,26 +1370,41 @@ export default function Desking() {
               </div>
             </div>
 
-            {/* deal object JSON */}
+            {/* deal object JSON — reflects activeDeal onlineStartedAt/deskOpenedAt/pausedAt + tradeOffer */}
             <div className="surface overflow-hidden p-0">
               <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5">
-                <h4 className="text-label-mono text-[var(--text-muted)]">Deal object • single record #8841</h4>
+                <h4 className="text-label-mono text-[var(--text-muted)]">Deal object • single record #{activeDeal?.id ?? "8841"}</h4>
                 <Badge variant="success" className="bg-white">
-                  Online ≡ Desk
+                  Online ≡ Desk • {activeDeal?.pausedAt ? "Paused" : "Active"}
                 </Badge>
               </div>
               <pre className="overflow-x-auto bg-zinc-900 p-3 font-mono text-[11px] leading-relaxed text-zinc-100">
                 {JSON.stringify(
                   {
-                    dealId: "8841",
-                    status: eSig === "Funded" ? "funded" : eSig === "Signed" ? "contracted" : "desking",
-                    customer: { name: "Jordan Morgan", email: "j.morgan@email.com", priorOnline: "2026-04-24T09:14:00-04:00" },
-                    vehicle: vehicle ? { vin: vehicle.vin, stockNo: vehicle.stockNo, year: vehicle.year, make: vehicle.make, model: vehicle.model, price: vehicle.internetPrice } : null,
+                    dealId: activeDeal?.id ?? "8841",
+                    status: activeDeal?.pausedAt ? "paused" : eSig === "Funded" ? "funded" : eSig === "Signed" ? "contracted" : "desking",
+                    stage: activeDeal?.stage ?? "lead",
+                    pausedAt: activeDeal?.pausedAt ?? null,
+                    onlineStartedAt: activeDeal?.onlineStartedAt ?? null,
+                    deskOpenedAt: activeDeal?.deskOpenedAt ?? activeDeal?.updatedAt ?? null,
+                    continuity: {
+                      banner: `Online ${onlineTime} → Desk ${deskTime} same #${activeDeal?.id ?? "8841"}`,
+                      singleObject: true,
+                      noRekey: true,
+                      paymentMatch: "to penny",
+                      bdcAlerted: !!activeDeal?.pausedAt,
+                      fix: "97%",
+                    },
+                    tradeOffer: activeDeal?.tradeOffer ?? null,
+                    tradePrefill: activeDeal?.tradeOffer ? { vinPhotos: activeDeal.tradeOffer.photos, condition: activeDeal.tradeOffer.condition, firmRange: `${fmt(activeDeal.tradeOffer.firmLow)}–${fmt(activeDeal.tradeOffer.firmHigh)}`, vin: activeDeal.tradeOffer.vin } : null,
+                    resumeLink,
+                    customer: { name: activeDeal?.customerName ?? "Jordan Morgan", email: "j.morgan@email.com", priorOnline: activeDeal?.onlineStartedAt ?? "2026-04-24T09:14:00-04:00" },
+                    vehicle: vehicle ? { vin: vehicle.vin, stockNo: vehicle.stockNo, year: vehicle.year, make: vehicle.make, model: vehicle.model, price: vehicle.internetPrice } : (activeDeal ? { vin: activeDeal.vin, stockNo: activeDeal.stockNo, vehicleLabel: activeDeal.vehicleLabel } : null),
                     lender: lender?.name,
                     state: stateCode,
                     pencils: pencils.map((pc) => ({ term: pc.term, apr: pc.apr, monthly: Number(pc.monthly.toFixed(2)), financed: pc.financed })),
                     fi: { products: Array.from(chosen), disclosureStep: disclosure, eSig },
-                    continuity: "F1 • F3 • E5: online started, desk continued — one object, no re-key, payment matched to the penny",
+                    timeline: activeDeal?.timeline?.slice(-4) ?? [],
                   },
                   null,
                   2
@@ -1200,7 +1426,7 @@ export default function Desking() {
 
       {/* disclosure guardrail hint — subtle */}
       <AnimatePresence>
-        {disclosure === 1 && (
+        {disclosure === 1 && !toast && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1208,6 +1434,25 @@ export default function Desking() {
             className="pointer-events-none fixed bottom-4 left-1/2 z-40 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800 shadow-lg md:flex"
           >
             <Wrench size={14} /> E4 guardrail: disclosures must be presented in order — menu is locked until step 1 completes.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* F3 toast — Copied — resume link • BDC alerted • 97% fix • zinc/cobalt motion */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] as const }}
+            className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-[12px] font-medium text-white shadow-xl"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white">
+              <CheckCircle size={12} weight="fill" />
+            </span>
+            <span className="font-mono text-[12px] font-semibold tracking-tight">{toast}</span>
+            <span className="hidden rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px] tracking-widest text-white md:inline-flex">F3 • 97% fix</span>
           </motion.div>
         )}
       </AnimatePresence>

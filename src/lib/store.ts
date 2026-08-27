@@ -53,6 +53,8 @@ export type F1Deal = {
   stipsUploaded: boolean
   stips: { id: string; name: string; status: "pending" | "uploaded" | "verified" }[]
   pickupScheduledAt: string | null
+  pausedAt: string | null
+  deskOpenedAt: string | null
 }
 
 export type VoiceCall = {
@@ -377,6 +379,10 @@ export type AppState = {
   uploadStip: (dealId: string, stipId: string) => void
   schedulePickup: (dealId: string, iso: string) => void
   hardPullAndFund: (dealId: string) => void
+  pauseDeal: (dealId: string) => void
+  resumeDeal: (dealId: string) => void
+  setOnlineStartedAt: (dealId: string, iso: string | null) => void
+  setDeskOpenedAt: (dealId: string, iso: string | null) => void
   // F2 + F17
   setVehicleRecon: (vehicleId: string, status: string) => void
   setVehiclePrice: (vehicleId: string, price: number) => void
@@ -447,6 +453,10 @@ export type AppState = {
   // T1 Conversational BI
   conversationalBI: ConversationalBIState
   queryBI: (nl: string) => ConversationalBIEntry
+  // F8 06:00 DOC distribution — shared live recipient count (RMI ≥100)
+  docRecipients: number
+  setDocRecipients: (n: number) => void
+  adjustDocRecipients: (delta: number) => void
 }
 
 const now = () => new Date().toISOString().slice(11,19)
@@ -477,6 +487,8 @@ const makeDeal = (id: string, name: string, vin: string): F1Deal => {
       { id: "stip-por", name: "Proof of residence — utility bill", status: "pending" as const },
     ],
     pickupScheduledAt: null,
+    pausedAt: null,
+    deskOpenedAt: null,
   }
 }
 
@@ -821,7 +833,34 @@ export const useStore = create<AppState>((set, get)=> ({
   vehicles: seedVehicles,
   customers: seedCustomers,
   deals: (() => {
-    const d1 = { ...makeDeal("D-1041", "Marcus Chen", seedVehicles[0].vin), stage: "lead" as DealStage, createdAt: new Date(Date.now() - 1000*60*62*24*2).toISOString(), updatedAt: new Date(Date.now() - 1000*60*62*24*2).toISOString() }
+    const baseOnlineAt = new Date(); baseOnlineAt.setHours(9,14,0,0)
+    const baseDeskAt = new Date(); baseDeskAt.setHours(9,22,0,0)
+    const tradeOfferSeed: F1Deal["tradeOffer"] = {
+      vin: "1HGCM82633A099412",
+      photos: ["front","rear","odo","vin_plate"],
+      condition: "average" as const,
+      firmLow: 17600,
+      firmHigh: 18800,
+      firmMid: 18200,
+      acv: 18200,
+      appraisalSource: "E3 • KBB + BlackBook + condition photos",
+      capturedAt: baseOnlineAt.toISOString(),
+    }
+    const d1 = {
+      ...makeDeal("D-1041", "Marcus Chen", seedVehicles[0].vin),
+      stage: "lead" as DealStage,
+      createdAt: new Date(Date.now() - 1000*60*62*24*2).toISOString(),
+      updatedAt: baseDeskAt.toISOString(),
+      onlineStartedAt: baseOnlineAt.toISOString(),
+      deskOpenedAt: baseDeskAt.toISOString(),
+      channel: "online" as const,
+      tradeOffer: tradeOfferSeed,
+      timeline: [
+        { t: "09:14 EST", label: "Online deal started — RAV4 Hybrid • soft pull consent • trade captured" },
+        { t: "09:22 EST", label: "Desk • S. Rivera (SM) opened same record #D-1041 • no re-key • F1 continuity ✓" },
+        { t: baseDeskAt.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) + " EST", label: "Trade VIN/photos/condition pre-filled • firm $17,600–$18,800 • E3" },
+      ],
+    }
     const d2 = { ...makeDeal("D-1042", "Priya Nair", seedVehicles[2].vin), stage: "desked" as DealStage, pencil: { price: 48200, rate: 6.49, term: 72, down: 3000, tax: 1890, fees: 489, monthly: 612, gross: 2410 }, createdAt: new Date(Date.now() - 1000*60*60*24*6).toISOString(), updatedAt: new Date(Date.now() - 1000*60*60*24*6).toISOString() }
     // additional seeded delivered deals for E11 velocity — spread across rooftops/weeks
     const d3 = { ...makeDeal("D-1043", "Aaliyah Johnson", seedVehicles[3].vin), stage: "delivered" as DealStage, pencil: { price: 36490, rate: 6.49, term: 72, down: 3000, tax: 1890, fees: 489, monthly: 612, gross: 3420 }, createdAt: new Date(Date.now() - 1000*60*60*24*10).toISOString(), updatedAt: new Date(Date.now() - 1000*60*60*24*1).toISOString(), deliveredAt: new Date(Date.now() - 1000*60*60*24*1).toISOString(), glPosted: true } as F1Deal
@@ -908,6 +947,9 @@ export const useStore = create<AppState>((set, get)=> ({
   complianceState: seedComplianceState,
   vendorPayments: seedVendorPayments,
   dataWarehouse: seedDataWarehouse,
+  docRecipients: 127,
+  setDocRecipients: (n: number) => set({ docRecipients: Math.max(80, Math.min(250, Math.round(n))) }),
+  adjustDocRecipients: (delta: number) => set(s => ({ docRecipients: Math.max(80, Math.min(250, s.docRecipients + delta)) })),
   loanerFleet: seedLoanerFleet,
   shuttleRides: seedShuttleRides,
   tireSets: seedTireSets,
@@ -1197,6 +1239,36 @@ export const useStore = create<AppState>((set, get)=> ({
   })),
   hardPullAndFund: (dealId)=> set(s=> ({
     deals: s.deals.map(d=> d.id===dealId ? { ...d, credit: { bureau: d.softPull?.score ?? 742, decision: "approved" as const, lender: "Wells • 6.99% • approved" }, funding: { status: "funded" as const, cit: null, depositPaid: d.funding.depositPaid, depositAmount: d.funding.depositAmount ?? 500, depositMethod: d.funding.depositMethod ?? "Embedded" }, glPosted: true, eSignStatus: "funded" as const, timeline: [...d.timeline, { t: now(), label: "Hard pull + lender decision: Wells 6.99% APPROVED • funded • CIT cleared • GL posted E2" }] } : d)
+  })),
+  pauseDeal: (dealId)=> set(s=> {
+    const at = new Date().toISOString()
+    const short = new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    return {
+      deals: s.deals.map(d=> d.id===dealId ? {
+        ...d,
+        stage: "lead" as DealStage,
+        pausedAt: at,
+        deskOpenedAt: d.deskOpenedAt ?? at,
+        timeline: [...d.timeline, { t: short, label: `Paused mid-checkout — resume link sent, BDC alerted, deal persists • https://sovereign.app/resume/${d.id} • BDC task queued • 97% fix` }],
+      } : d)
+    }
+  }),
+  resumeDeal: (dealId)=> set(s=> {
+    const short = new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    return {
+      deals: s.deals.map(d=> d.id===dealId ? {
+        ...d,
+        pausedAt: null,
+        stage: "pencil" as DealStage,
+        timeline: [...d.timeline, { t: short, label: `Resumed — deal restored from paused • same record #${d.id} • no re-key • ${short} • 97% fix` }],
+      } : d)
+    }
+  }),
+  setOnlineStartedAt: (dealId, iso)=> set(s=> ({
+    deals: s.deals.map(d=> d.id===dealId ? { ...d, onlineStartedAt: iso, channel: iso ? "online" as const : "in_store" as const, deskOpenedAt: d.deskOpenedAt ?? new Date().toISOString(), timeline: [...d.timeline, { t: new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}), label: iso ? `Online Started ${new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} • trade VIN/photos/condition pre-filled` : "Online Started cleared • back to in-store" }] } : d)
+  })),
+  setDeskOpenedAt: (dealId, iso)=> set(s=> ({
+    deals: s.deals.map(d=> d.id===dealId ? { ...d, deskOpenedAt: iso, timeline: [...d.timeline, { t: new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}), label: iso ? `Desk opened ${new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} • same #${d.id}` : "Desk opened cleared" }] } : d)
   })),
   // ── F2 + F17 ──
   setVehicleRecon: (vehicleId, status)=> set(s=> ({
